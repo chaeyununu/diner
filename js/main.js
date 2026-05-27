@@ -1,4 +1,4 @@
-﻿import * as THREE from "three";
+import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -48,6 +48,13 @@ let activeRoute = FRONT_ENTRY;
 
 for (const pt of [...FRONT_ENTRY, ...BACK_ENTRY]) {
   pt.y += 0.65;
+}
+
+// Entrance route only: raise camera Y slightly.
+// Rear route keeps the original height.
+const FRONT_ENTRY_EXTRA_Y = 0.60;
+for (const pt of FRONT_ENTRY) {
+  pt.y += FRONT_ENTRY_EXTRA_Y;
 }
 
 // ?? Scroll state ??????????????????????????????????????????????????
