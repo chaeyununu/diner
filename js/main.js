@@ -393,9 +393,9 @@ function loadRabbid() {
     .then(gltf => {
       const rabbid = gltf.scene;
       prepareMaterials(rabbid);
-      rabbid.position.set(0.0501, -0.4850, 0.5041);
+      rabbid.position.set(0.0501, -0.5050, 0.5041);
       rabbid.scale.setScalar(0.038);
-      rabbid.rotation.y = -4.676 + Math.PI - 0.18; // Rabbid looks slightly to its own right
+      rabbid.rotation.y = -4.676 + Math.PI - 0.27; // Rabbid looks a bit more to its own right
       scene.add(rabbid);
       addRabbidSoftLight(rabbid.position);
       if (gltf.animations && gltf.animations.length) {
