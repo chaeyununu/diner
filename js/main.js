@@ -27,7 +27,7 @@ const FRONT_ENTRY = [
   { id: "P02", x: -3.5636, y: -0.7071, z: -2.0796, yaw:  0.104, pitch:  0.150, fov: 52 },
   { id: "P03", x: -3.5636, y: -0.7071, z: -2.0796, yaw: -0.672, pitch:  0.182, fov: 52 },
   { id: "P04", x: -3.5636, y: -0.7071, z: -2.0796, yaw: -1.412, pitch:  0.196, fov: 52 },
-  { id: "P05", x: -3.5636, y: -0.7071, z: -2.0796, yaw: -2.132, pitch:  0.178, fov: 52 },
+  { id: "P05", x: -3.5636, y: -0.7071, z: -2.0796, yaw: -2.132, pitch:  0.235, fov: 52 },
   { id: "P06", x: -3.5636, y: -0.7071, z: -2.0796, yaw: -1.120, pitch:  0.165, fov: 52 },
   { id: "P07", x: -2.3200, y: -0.7071, z: -1.9700, yaw: -1.080, pitch:  0.158, fov: 52 },
   { id: "P08", x: -1.0600, y: -0.7071, z: -1.8600, yaw: -1.060, pitch:  0.150, fov: 52 },
@@ -52,7 +52,7 @@ for (const pt of [...FRONT_ENTRY, ...BACK_ENTRY]) {
 
 // Entrance route only: raise camera Y slightly.
 // Rear route keeps the original height.
-const FRONT_ENTRY_EXTRA_Y = 0.60;
+const FRONT_ENTRY_EXTRA_Y = 0.35;
 for (const pt of FRONT_ENTRY) {
   pt.y += FRONT_ENTRY_EXTRA_Y;
 }
