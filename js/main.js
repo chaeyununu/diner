@@ -105,8 +105,8 @@ loader.setDRACOLoader(dracoLoader);
 let rabbidMixer = null;
 let rabbidClips  = [];
 let rabbidAction = null;
-let rabbidPlayElapsed = 0;
-const RABBID_PLAY_INTERVAL = 5 * 60;
+let rabbidNextPlayAt = 0;
+const RABBID_PLAY_INTERVAL_MS = 5 * 60 * 1000;
 const RABBID_MIXER_MAX_STEP = 1 / 30;
 
 const clock = new THREE.Clock();
@@ -405,8 +405,18 @@ function loadRabbid() {
         rabbidAction.setLoop(THREE.LoopOnce, 1);
         rabbidAction.clampWhenFinished = false;
         rabbidAction.enabled = true;
+        rabbidNextPlayAt = performance.now() + RABBID_PLAY_INTERVAL_MS;
+        console.log("[RABBID ANIMATION READY]", {
+          clips: gltf.animations.length,
+          nextPlayMs: RABBID_PLAY_INTERVAL_MS,
+        });
         rabbidMixer.addEventListener("finished", event => {
           if (event.action === rabbidAction) rabbidAction.enabled = false;
+        });
+      } else {
+        console.warn("[RABBID ANIMATION MISSING]", {
+          animations: gltf.animations ? gltf.animations.length : 0,
+          userAgent: navigator.userAgent,
         });
       }
     })
@@ -852,7 +862,8 @@ window.addEventListener("resize", () => {
 // ?? Render loop ???????????????????????????????????????????????????
 function animate() {
   requestAnimationFrame(animate);
-  const delta = Math.min(clock.getDelta(), 1 / 30); // clamp: prevents jump after tab-switch
+  const realDelta = clock.getDelta();
+  const delta = Math.min(realDelta, 1 / 30); // clamp: prevents jump after tab-switch
   scrollSmooth += (scrollTarget - scrollSmooth) * Math.min(delta * SMOOTH_SPEED, 1);
   scrollSmooth = Math.max(0, Math.min(1, scrollSmooth));
   applyCameraFromProgress(scrollSmooth);
@@ -861,10 +872,13 @@ function animate() {
 
   _syncAudioLocation(); // position-based inside/outside check
   if (rabbidMixer) {
-    rabbidMixer.update(Math.min(delta, RABBID_MIXER_MAX_STEP));
-    rabbidPlayElapsed += delta;
-    if (rabbidPlayElapsed >= RABBID_PLAY_INTERVAL && (!rabbidAction || !rabbidAction.isRunning())) {
-      rabbidPlayElapsed = 0;
+    rabbidMixer.update(Math.min(realDelta, RABBID_MIXER_MAX_STEP));
+
+    const now = performance.now();
+    if (!rabbidNextPlayAt) rabbidNextPlayAt = now + RABBID_PLAY_INTERVAL_MS;
+
+    if (rabbidAction && now >= rabbidNextPlayAt && !rabbidAction.isRunning()) {
+      rabbidNextPlayAt = now + RABBID_PLAY_INTERVAL_MS;
       playRabbidOnce();
     }
   }
