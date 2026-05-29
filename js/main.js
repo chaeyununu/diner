@@ -111,12 +111,16 @@ let rabbidEventPlaying = false;
 let rabbidNextPlayAt = 0;
 let rabbidBreathBone = null;
 let rabbidBreathBoneBasePos = null;
+let rabbidHeadFollowBone = null;
+let rabbidHeadFollowBoneBasePos = null;
 const RABBID_PLAY_INTERVAL_MS = 5 * 60 * 1000;
 const RABBID_MIXER_MAX_STEP = 1 / 30;
 const RABBID_BASE_SCALE = 0.038;
 const RABBID_BODY_BREATH_SPEED = 0.0018;
 const RABBID_BODY_BREATH_UP = 0.075;       // model-local units, subtle belly/body lift
 const RABBID_BODY_BREATH_FORWARD = 0.095;  // model-local units, subtle belly/body push forward
+const RABBID_HEAD_FOLLOW_UP = 0.016;       // much smaller than body, just a tiny follow-through
+const RABBID_HEAD_FOLLOW_FORWARD = 0.022;  // much smaller than body, keeps head from looking detached
 
 const clock = new THREE.Clock();
 
@@ -426,14 +430,32 @@ function playRabbidOnce() {
 function setupRabbidBodyBreathingBone(root) {
   rabbidBreathBone = null;
   rabbidBreathBoneBasePos = null;
+  rabbidHeadFollowBone = null;
+  rabbidHeadFollowBoneBasePos = null;
 
-  // This GLB has a separate Stomach_044 joint.
-  // Using this keeps the head/ears mostly untouched, unlike scaling the whole model.
+  // Stomach drives the main breathing motion.
+  // Neck/Head follows only a little, so the head does not look frozen or detached.
   root.traverse(obj => {
-    if (rabbidBreathBone) return;
     const name = obj.name || "";
-    if (/Stomach/i.test(name)) rabbidBreathBone = obj;
+
+    if (!rabbidBreathBone && /Stomach/i.test(name)) {
+      rabbidBreathBone = obj;
+    }
+
+    // Prefer neck, because it moves the head/ears/eyes together more naturally.
+    // Fallback to Head1/Head if the neck bone name changes in another export.
+    if (!rabbidHeadFollowBone && /Neck/i.test(name)) {
+      rabbidHeadFollowBone = obj;
+    }
   });
+
+  if (!rabbidHeadFollowBone) {
+    root.traverse(obj => {
+      if (rabbidHeadFollowBone) return;
+      const name = obj.name || "";
+      if (/Head1|Head/i.test(name)) rabbidHeadFollowBone = obj;
+    });
+  }
 
   if (rabbidBreathBone) {
     rabbidBreathBoneBasePos = rabbidBreathBone.position.clone();
@@ -441,19 +463,30 @@ function setupRabbidBodyBreathingBone(root) {
   } else {
     console.warn("[RABBID BODY BREATH BONE MISSING] Stomach bone not found.");
   }
+
+  if (rabbidHeadFollowBone) {
+    rabbidHeadFollowBoneBasePos = rabbidHeadFollowBone.position.clone();
+    console.log("[RABBID HEAD FOLLOW BONE]", rabbidHeadFollowBone.name);
+  } else {
+    console.warn("[RABBID HEAD FOLLOW BONE MISSING] Neck/Head bone not found.");
+  }
 }
 
 function resetRabbidBodyBreathing() {
-  if (!rabbidBreathBone || !rabbidBreathBoneBasePos) return;
-  rabbidBreathBone.position.copy(rabbidBreathBoneBasePos);
+  if (rabbidBreathBone && rabbidBreathBoneBasePos) {
+    rabbidBreathBone.position.copy(rabbidBreathBoneBasePos);
+  }
+  if (rabbidHeadFollowBone && rabbidHeadFollowBoneBasePos) {
+    rabbidHeadFollowBone.position.copy(rabbidHeadFollowBoneBasePos);
+  }
 }
 
 function updateRabbidProceduralBreathing() {
   if (!rabbidRoot || rabbidEventPlaying) return;
   if (!rabbidBreathBone || !rabbidBreathBoneBasePos) return;
 
-  // Body-only breathing: the belly/body joint moves slightly upward + forward.
-  // Head is not directly scaled or moved.
+  // Body breathing: belly/body moves upward + forward.
+  // Head/neck follows at a much smaller amount so it feels connected, not frozen.
   const t = performance.now() * RABBID_BODY_BREATH_SPEED;
   const pulse = (Math.sin(t) + 1) * 0.5;
   const softPulse = pulse * pulse * (3 - 2 * pulse);
@@ -463,6 +496,14 @@ function updateRabbidProceduralBreathing() {
     rabbidBreathBoneBasePos.y + softPulse * RABBID_BODY_BREATH_UP,
     rabbidBreathBoneBasePos.z + softPulse * RABBID_BODY_BREATH_FORWARD
   );
+
+  if (rabbidHeadFollowBone && rabbidHeadFollowBoneBasePos) {
+    rabbidHeadFollowBone.position.set(
+      rabbidHeadFollowBoneBasePos.x,
+      rabbidHeadFollowBoneBasePos.y + softPulse * RABBID_HEAD_FOLLOW_UP,
+      rabbidHeadFollowBoneBasePos.z + softPulse * RABBID_HEAD_FOLLOW_FORWARD
+    );
+  }
 }
 
 function loadRabbid() {
