@@ -130,8 +130,10 @@ const RABBID_SHOULDER_BREATH_UP = 0.620;   // clavicle/shoulder only: large visi
 const RABBID_SHOULDER_BREATH_FORWARD = 0.245;
 const RABBID_UPPER_ARM_BREATH_UP = 0.255;  // small follow-through so shoulder area looks attached
 const RABBID_UPPER_ARM_BREATH_FORWARD = 0.065;
-const RABBID_HEAD_STABILIZE_UP = 0.0;     // do not procedurally move the head/neck
+const RABBID_HEAD_STABILIZE_UP = 0.0;     // kept for compatibility; actual head rhythm uses tiny follow values below
 const RABBID_HEAD_STABILIZE_FORWARD = 0.0;
+const RABBID_FACE_RHYTHM_FOLLOW_UP = 0.032;      // tiny same-rhythm face/head follow, not a big head bob
+const RABBID_FACE_RHYTHM_FOLLOW_FORWARD = 0.014; // tiny same-rhythm face/head follow
 
 const clock = new THREE.Clock();
 
@@ -568,8 +570,16 @@ function updateRabbidProceduralBreathing() {
     });
   }
 
-  // Do not move Neck/Head here. The GLB idle clip can keep its original face/eye motion,
-  // while the procedural breath stays limited to belly + shoulder bones.
+  // Face/head rhythm: almost fixed, but not rhythmically detached from the body.
+  // This uses the exact same softPulse as belly/shoulders, so the face follows the breath timing
+  // without creating the old "whole character gets taller/shorter" look.
+  if (rabbidHeadFollowBone && rabbidHeadFollowBoneBasePos) {
+    rabbidHeadFollowBone.position.set(
+      rabbidHeadFollowBoneBasePos.x,
+      rabbidHeadFollowBoneBasePos.y + softPulse * RABBID_FACE_RHYTHM_FOLLOW_UP * boost,
+      rabbidHeadFollowBoneBasePos.z + softPulse * RABBID_FACE_RHYTHM_FOLLOW_FORWARD * boost
+    );
+  }
 }
 
 function loadRabbid() {
