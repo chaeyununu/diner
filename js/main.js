@@ -6,7 +6,7 @@ import { createCityBackdrop, setupBloom, setGroundWet, createFrontBackdrop, setW
 import { createExteriorRain } from "./rain-effect.js";
 import { initAudio } from "./audio.js";
 
-const VERSION = "20260529162500";
+const VERSION = "20260530025500";
 const STT_DINER_PATH = "./assets/models/sttdiner.glb?v=" + VERSION;
 const DINER_PATH  = "./assets/models/diners.glb?v=" + VERSION;
 const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
@@ -928,7 +928,8 @@ function addCeilingLightFixtures(root) {
   // light reaches nearby booths and gives the Rabbid face a slight red bounce.
   const startViewTubeCenters = [
     { x: 0.08,  z: 0.50, startViewGlow: true },
-    { x: -1.05, z: 0.50, startViewGlow: true },
+    // Newly added tube only: moved toward the ENTRANCE start/outside direction.
+    { x: -1.05, z: 1.05, startViewGlow: true },
   ];
 
   startViewTubeCenters.forEach(target => {
@@ -943,7 +944,9 @@ function addCeilingLightFixtures(root) {
   });
 
   tableCenters.forEach(c => {
-    if (Math.abs(c.z - 0.50) < 0.20 && (Math.abs(c.x - 0.08) < 0.18 || Math.abs(c.x + 1.05) < 0.18)) {
+    const isOriginalStartTube = Math.abs(c.x - 0.08) < 0.18 && Math.abs(c.z - 0.50) < 0.20;
+    const isAddedStartTube = Math.abs(c.x + 1.05) < 0.18 && Math.abs(c.z - 1.05) < 0.20;
+    if (isOriginalStartTube || isAddedStartTube) {
       c.startViewGlow = true;
     }
   });
