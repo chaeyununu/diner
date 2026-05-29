@@ -6,7 +6,7 @@ import { createCityBackdrop, setupBloom, setGroundWet, createFrontBackdrop, setW
 import { createExteriorRain } from "./rain-effect.js";
 import { initAudio } from "./audio.js";
 
-const VERSION = "20260528050000";
+const VERSION = "20260529162500";
 const STT_DINER_PATH = "./assets/models/sttdiner.glb?v=" + VERSION;
 const DINER_PATH  = "./assets/models/diners.glb?v=" + VERSION;
 const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
@@ -111,16 +111,23 @@ let rabbidEventPlaying = false;
 let rabbidNextPlayAt = 0;
 let rabbidBreathBone = null;
 let rabbidBreathBoneBasePos = null;
+let rabbidShoulderBreathBones = [];
+let rabbidShoulderBreathBasePos = [];
 let rabbidHeadFollowBone = null;
 let rabbidHeadFollowBoneBasePos = null;
 const RABBID_PLAY_INTERVAL_MS = 5 * 60 * 1000;
-const RABBID_MIXER_MAX_STEP = 1 / 30;
+const RABBID_IS_IPAD_LIKE = /iPad/i.test(navigator.userAgent)
+  || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const RABBID_MIXER_MAX_STEP = RABBID_IS_IPAD_LIKE ? 1 / 10 : 1 / 12;
+const RABBID_BREATH_DEVICE_BOOST = RABBID_IS_IPAD_LIKE ? 1.28 : 1.0;
 const RABBID_BASE_SCALE = 0.038;
-const RABBID_BODY_BREATH_SPEED = 0.0018;
-const RABBID_BODY_BREATH_UP = 0.075;       // model-local units, subtle belly/body lift
-const RABBID_BODY_BREATH_FORWARD = 0.095;  // model-local units, subtle belly/body push forward
-const RABBID_HEAD_FOLLOW_UP = 0.016;       // much smaller than body, just a tiny follow-through
-const RABBID_HEAD_FOLLOW_FORWARD = 0.022;  // much smaller than body, keeps head from looking detached
+const RABBID_BODY_BREATH_SPEED = 0.0030;
+const RABBID_BODY_BREATH_UP = 0.220;       // belly/body: stronger visible inhale lift
+const RABBID_BODY_BREATH_FORWARD = 0.260;  // belly/body: stronger forward breathing push
+const RABBID_SHOULDER_BREATH_UP = 0.105;   // shoulder/upper chest rises clearly
+const RABBID_SHOULDER_BREATH_FORWARD = 0.060;
+const RABBID_HEAD_FOLLOW_UP = 0.034;       // head follows, but less than shoulders/body
+const RABBID_HEAD_FOLLOW_FORWARD = 0.030;
 
 const clock = new THREE.Clock();
 
@@ -430,16 +437,23 @@ function playRabbidOnce() {
 function setupRabbidBodyBreathingBone(root) {
   rabbidBreathBone = null;
   rabbidBreathBoneBasePos = null;
+  rabbidShoulderBreathBones = [];
+  rabbidShoulderBreathBasePos = [];
   rabbidHeadFollowBone = null;
   rabbidHeadFollowBoneBasePos = null;
 
-  // Stomach drives the main breathing motion.
+  // Stomach drives the belly motion.
+  // Spine2 + clavicles drive the visible shoulder/upper-chest inhale.
   // Neck/Head follows only a little, so the head does not look frozen or detached.
   root.traverse(obj => {
     const name = obj.name || "";
 
     if (!rabbidBreathBone && /Stomach/i.test(name)) {
       rabbidBreathBone = obj;
+    }
+
+    if (/Spine2|L_Clavicle|R_Clavicle/i.test(name)) {
+      rabbidShoulderBreathBones.push(obj);
     }
 
     // Prefer neck, because it moves the head/ears/eyes together more naturally.
@@ -464,6 +478,13 @@ function setupRabbidBodyBreathingBone(root) {
     console.warn("[RABBID BODY BREATH BONE MISSING] Stomach bone not found.");
   }
 
+  if (rabbidShoulderBreathBones.length) {
+    rabbidShoulderBreathBasePos = rabbidShoulderBreathBones.map(bone => bone.position.clone());
+    console.log("[RABBID SHOULDER BREATH BONES]", rabbidShoulderBreathBones.map(bone => bone.name));
+  } else {
+    console.warn("[RABBID SHOULDER BREATH BONES MISSING] Spine2/Clavicle bones not found.");
+  }
+
   if (rabbidHeadFollowBone) {
     rabbidHeadFollowBoneBasePos = rabbidHeadFollowBone.position.clone();
     console.log("[RABBID HEAD FOLLOW BONE]", rabbidHeadFollowBone.name);
@@ -476,6 +497,11 @@ function resetRabbidBodyBreathing() {
   if (rabbidBreathBone && rabbidBreathBoneBasePos) {
     rabbidBreathBone.position.copy(rabbidBreathBoneBasePos);
   }
+  if (rabbidShoulderBreathBones.length && rabbidShoulderBreathBasePos.length) {
+    rabbidShoulderBreathBones.forEach((bone, i) => {
+      if (rabbidShoulderBreathBasePos[i]) bone.position.copy(rabbidShoulderBreathBasePos[i]);
+    });
+  }
   if (rabbidHeadFollowBone && rabbidHeadFollowBoneBasePos) {
     rabbidHeadFollowBone.position.copy(rabbidHeadFollowBoneBasePos);
   }
@@ -485,23 +511,39 @@ function updateRabbidProceduralBreathing() {
   if (!rabbidRoot || rabbidEventPlaying) return;
   if (!rabbidBreathBone || !rabbidBreathBoneBasePos) return;
 
-  // Body breathing: belly/body moves upward + forward.
-  // Head/neck follows at a much smaller amount so it feels connected, not frozen.
+  // Stronger inhale/exhale: belly pushes forward, upper chest/shoulders visibly rise,
+  // and the head follows only slightly. performance.now() keeps the breathing pace
+  // stable even when iPad frame rate drops.
   const t = performance.now() * RABBID_BODY_BREATH_SPEED;
   const pulse = (Math.sin(t) + 1) * 0.5;
   const softPulse = pulse * pulse * (3 - 2 * pulse);
+  const boost = RABBID_BREATH_DEVICE_BOOST;
 
   rabbidBreathBone.position.set(
     rabbidBreathBoneBasePos.x,
-    rabbidBreathBoneBasePos.y + softPulse * RABBID_BODY_BREATH_UP,
-    rabbidBreathBoneBasePos.z + softPulse * RABBID_BODY_BREATH_FORWARD
+    rabbidBreathBoneBasePos.y + softPulse * RABBID_BODY_BREATH_UP * boost,
+    rabbidBreathBoneBasePos.z + softPulse * RABBID_BODY_BREATH_FORWARD * boost
   );
+
+  if (rabbidShoulderBreathBones.length && rabbidShoulderBreathBasePos.length) {
+    rabbidShoulderBreathBones.forEach((bone, i) => {
+      const base = rabbidShoulderBreathBasePos[i];
+      if (!base) return;
+      const name = bone.name || "";
+      const spineWeight = /Spine2/i.test(name) ? 1.0 : 0.82;
+      bone.position.set(
+        base.x,
+        base.y + softPulse * RABBID_SHOULDER_BREATH_UP * boost * spineWeight,
+        base.z + softPulse * RABBID_SHOULDER_BREATH_FORWARD * boost * spineWeight
+      );
+    });
+  }
 
   if (rabbidHeadFollowBone && rabbidHeadFollowBoneBasePos) {
     rabbidHeadFollowBone.position.set(
       rabbidHeadFollowBoneBasePos.x,
-      rabbidHeadFollowBoneBasePos.y + softPulse * RABBID_HEAD_FOLLOW_UP,
-      rabbidHeadFollowBoneBasePos.z + softPulse * RABBID_HEAD_FOLLOW_FORWARD
+      rabbidHeadFollowBoneBasePos.y + softPulse * RABBID_HEAD_FOLLOW_UP * boost,
+      rabbidHeadFollowBoneBasePos.z + softPulse * RABBID_HEAD_FOLLOW_FORWARD * boost
     );
   }
 }
