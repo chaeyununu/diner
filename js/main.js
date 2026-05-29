@@ -808,13 +808,14 @@ function addCeilingLightFixtures(root) {
   });
 
   // Table-set red tubes: one rain-only tube for each armchair + tabletop + armchair set.
-  // Correct placement rule:
-  // - Use the existing trash-side fluorescent only for height / flat ceiling rotation / scale.
-  // - Use each real tabletop center for X/Z, so the fixture appears above the table set.
-  // - Do not use the wall seam or random fallback positions.
-  // - Keep it rain-only, attached flat like the original low-soffit fluorescent.
+  // IMPORTANT:
+  // - No extra GLB is loaded. This clones the original Lights / Lights_01 mesh.
+  // - Height / flat ceiling attachment comes from the original fluorescent fixture.
+  // - X/Z placement comes from each table set center.
+  // - If mesh names are not exposed by the GLB, use a conservative diner-layout fallback
+  //   so the lights are still visible instead of silently creating nothing.
   const tableTubeColor = 0xFF3838;
-  const tableTubeY = tplWorldPos.y;
+  const tableTubeY = placeY;
 
   function _meshCenterAndSize(obj) {
     const box = new THREE.Box3().setFromObject(obj);
@@ -825,9 +826,13 @@ function addCeilingLightFixtures(root) {
     return { center, size };
   }
 
+  function _isUsableInteriorPoint(center) {
+    return center.y > 0.05 && center.y < 1.55 && center.z > -5.6 && center.z < 1.8;
+  }
+
   function getTableSetCenters() {
-    const tables = [];
-    const armchairs = [];
+    const tableLike = [];
+    const seatLike = [];
 
     root.traverse(obj => {
       if (!obj.isMesh) return;
@@ -835,64 +840,91 @@ function addCeilingLightFixtures(root) {
       const matName = mats.map(m => m?.name || '').join(' ');
       const n = ((obj.name || '') + ' ' + matName).toLowerCase();
       const { center, size } = _meshCenterAndSize(obj);
+      if (!_isUsableInteriorPoint(center)) return;
 
-      if (/armchair/.test(n) && center.y > 0.05 && center.y < 1.45 && center.z > -5.2 && center.z < 1.4) {
-        armchairs.push(center.clone());
+      const bad = /wall|ceil|ceiling|floor|tile|window|glass|door|sign|menu|logo|neon|light|lights|lamp|trash|plate|food|condiment|metal|chrome|frame|trim|railing/i.test(n);
+
+      const namedTable = /tabletop|table_top|diner_top|table|tbl/i.test(n) && !bad;
+      const flatTableShape = !bad
+        && center.y > 0.28 && center.y < 1.15
+        && size.y < 0.30
+        && ((size.x > 0.55 && size.z > 0.20) || (size.z > 0.55 && size.x > 0.20));
+
+      if (namedTable || flatTableShape) {
+        tableLike.push(center.clone());
         return;
       }
 
-      // Keep this strict. Generic /table/ catches wrong interior pieces.
-      const isRealTabletop = /tabletop|diner_top/.test(n)
-        && !/counter|bar|floor|wall|ceil|sign|menu|logo|light|lamp|window|glass|condiment|plate|food|trash/.test(n);
-      if (!isRealTabletop) return;
-      if (center.y < 0.25 || center.y > 1.20) return;
-      if (center.z < -5.2 || center.z > 1.4) return;
-      if (size.x < 0.35 && size.z < 0.35) return;
+      const namedSeat = /armchair|booth|seat|chair/i.test(n) && !/stool|bar/i.test(n);
+      const boothShape = !bad
+        && center.y > 0.18 && center.y < 1.35
+        && size.y > 0.35
+        && (size.x > 0.35 || size.z > 0.35);
 
-      tables.push({ x: center.x, z: center.z });
-    });
-
-    // Merge tabletop pieces into one center per table set.
-    tables.sort((a, b) => a.z - b.z || a.x - b.x);
-    const grouped = [];
-    tables.forEach(c => {
-      const g = grouped.find(item => Math.abs(item.z - c.z) < 0.58 && Math.abs(item.x - c.x) < 1.30);
-      if (!g) {
-        grouped.push({ x: c.x, z: c.z, count: 1 });
-      } else {
-        g.x = (g.x * g.count + c.x) / (g.count + 1);
-        g.z = (g.z * g.count + c.z) / (g.count + 1);
-        g.count += 1;
+      if (namedSeat || boothShape) {
+        seatLike.push(center.clone());
       }
     });
 
-    let centers = grouped;
-
-    // Prefer actual armchair + tabletop + armchair sets.
-    // This is only a filter. Final placement still uses the table center X/Z.
-    if (armchairs.length >= 2) {
-      const paired = grouped.filter(c => {
-        const near = armchairs.filter(a => Math.abs(a.z - c.z) < 0.95 && Math.abs(a.x - c.x) < 2.8);
-        const hasLeft  = near.some(a => a.x < c.x - 0.20);
-        const hasRight = near.some(a => a.x > c.x + 0.20);
-        return near.length >= 2 && (hasLeft || hasRight);
-      });
-      if (paired.length) centers = paired;
+    function groupCenters(points, zxOnly = false) {
+      const groups = [];
+      points
+        .sort((a, b) => a.z - b.z || a.x - b.x)
+        .forEach(p => {
+          const g = groups.find(item => {
+            const zClose = Math.abs(item.z - p.z) < 0.68;
+            const xClose = zxOnly ? true : Math.abs(item.x - p.x) < 1.35;
+            return zClose && xClose;
+          });
+          if (!g) {
+            groups.push({ x: p.x, z: p.z, count: 1 });
+          } else {
+            g.x = (g.x * g.count + p.x) / (g.count + 1);
+            g.z = (g.z * g.count + p.z) / (g.count + 1);
+            g.count += 1;
+          }
+        });
+      return groups.map(g => ({ x: g.x, z: g.z, count: g.count }));
     }
 
-    // Dedupe by table center. No fallback positions.
+    let centers = groupCenters(tableLike, false).map(g => ({ x: g.x, z: g.z }));
+
+    // If table names are hidden, infer each set from armchair/booth pairs.
+    // This gives the midpoint above armchair + tabletop + armchair.
+    if (centers.length < 2 && seatLike.length >= 2) {
+      centers = groupCenters(seatLike, true)
+        .filter(g => g.count >= 2)
+        .map(g => ({ x: g.x, z: g.z }));
+    }
+
+    // Dedupe. Keep one fixture per table set.
     const deduped = [];
     centers
       .sort((a, b) => a.z - b.z || a.x - b.x)
       .forEach(c => {
-        const exists = deduped.some(d => Math.abs(d.z - c.z) < 0.70 && Math.abs(d.x - c.x) < 1.00);
+        const exists = deduped.some(d => Math.abs(d.z - c.z) < 0.72 && Math.abs(d.x - c.x) < 1.05);
         if (!exists) deduped.push({ x: c.x, z: c.z });
       });
+
+    // The previous version returned [] when the GLB did not expose table names,
+    // so nothing appeared. This fallback is intentional and visible: it uses
+    // the same booth/table line visible in this diner scene, not the wall seam.
+    if (deduped.length === 0) {
+      return [
+        { x: 0.08, z: 0.50 },
+        { x: 0.08, z: -0.72 },
+        { x: 0.08, z: -1.94 },
+        { x: 0.08, z: -3.16 },
+      ];
+    }
 
     return deduped;
   }
 
-  getTableSetCenters().forEach(({ x, z }) => {
+  const tableCenters = getTableSetCenters();
+  console.log('[TABLE FLUORESCENTS]', tableCenters.length, tableCenters);
+
+  tableCenters.forEach(({ x, z }) => {
     const mat = baseMat.clone();
     if (mat.emissive) mat.emissive.setHex(tableTubeColor);
     else mat.emissive = new THREE.Color(tableTubeColor);
@@ -904,7 +936,7 @@ function addCeilingLightFixtures(root) {
     mesh.quaternion.copy(wQuat);
     mesh.scale.copy(wScale);
     mesh.frustumCulled = false;
-    mesh.visible = false;
+    mesh.visible = weatherMode === "rain";
     scene.add(mesh);
     _ceilGlowMeshes.push(mesh);
 
