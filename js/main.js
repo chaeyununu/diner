@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { createCityBackdrop, setupBloom, setGroundWet, createFrontBackdrop, setWeatherBackdrop } from "./city-backdrop.js";
@@ -10,6 +11,7 @@ const VERSION = "20260528050000";
 const STT_DINER_PATH = "./assets/models/sttdiner.glb?v=" + VERSION;
 const DINER_PATH  = "./assets/models/diners.glb?v=" + VERSION;
 const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
+const RABBID_IDLE_FBX_PATH = "./assets/models/Idle.fbx?v=" + VERSION;
 
 // ?? Route presets ?????????????????????????????????????????????????
 // frontEntry: approach from diner entrance ??walk in ??turn left ??booth tour
@@ -98,14 +100,26 @@ fillLight.position.set(-5, 3, -4);
 scene.add(fillLight);
 
 const loader = new GLTFLoader();
+const fbxLoader = new FBXLoader();
 const dracoLoader = new DRACOLoader();
 dracoLoader.setDecoderPath("https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/libs/draco/");
 loader.setDRACOLoader(dracoLoader);
 
-let rabbidMixer = null;
-let rabbidClips  = [];
-let rabbidAction = null;
+// Rabbid placement shared by the breathing FBX and the original GLB.
+const RABBID_POS = new THREE.Vector3(0.0501, -0.5050, 0.5041);
+const RABBID_ROT_Y = -4.676 + Math.PI - 0.42; // Rabbid looks more to its own right
+const RABBID_SCALE = 0.038;
+
+let rabbidIdleModel = null;
+let rabbidIdleMixer = null;
+let rabbidIdleAction = null;
+
+let rabbidEventModel = null;
+let rabbidEventMixer = null;
+let rabbidEventAction = null;
+
 let rabbidNextPlayAt = 0;
+let rabbidEventPlaying = false;
 const RABBID_PLAY_INTERVAL_MS = 5 * 60 * 1000;
 const RABBID_MIXER_MAX_STEP = 1 / 30;
 
@@ -370,6 +384,14 @@ function loadGltf(path, label) {
   });
 }
 
+function loadFbx(path, label) {
+  return new Promise((resolve, reject) => {
+    fbxLoader.load(path, resolve, undefined, err =>
+      reject(new Error(label + " load failed: " + String(err.message || err)))
+    );
+  });
+}
+
 function loadFirstGltf(paths, label) {
   return paths.reduce(
     (chain, path) => chain.catch(() => loadGltf(path, label)),
@@ -380,47 +402,110 @@ function loadFirstGltf(paths, label) {
 const loadingEl = document.getElementById("loading");
 function showLoading(msg) { if (loadingEl) loadingEl.innerHTML = msg; }
 
-// ?? Rabbid: play once every 5 minutes ????????????????????????????
-function playRabbidOnce() {
-  if (!rabbidAction) return;
-  rabbidAction.enabled = true;
-  rabbidAction.paused = false;
-  rabbidAction.reset().play();
+// ── Rabbid: breathing FBX loops, original GLB replaces it once every 5 minutes ──
+function applyRabbidTransform(model) {
+  model.position.copy(RABBID_POS);
+  model.scale.setScalar(RABBID_SCALE);
+  model.rotation.y = RABBID_ROT_Y;
+  model.frustumCulled = false;
 }
 
-function loadRabbid() {
-  loadGltf(RABBID_PATH, "rabbid")
+function setRabbidMode(mode) {
+  const showIdle = mode !== "event";
+  if (rabbidIdleModel) rabbidIdleModel.visible = showIdle;
+  if (rabbidEventModel) rabbidEventModel.visible = !showIdle;
+
+  if (rabbidIdleAction) {
+    rabbidIdleAction.paused = !showIdle;
+    if (showIdle && !rabbidIdleAction.isRunning()) rabbidIdleAction.play();
+  }
+}
+
+function playRabbidOnce() {
+  if (!rabbidEventAction || rabbidEventPlaying) return;
+
+  rabbidEventPlaying = true;
+  setRabbidMode("event");
+
+  rabbidEventAction.enabled = true;
+  rabbidEventAction.paused = false;
+  rabbidEventAction.reset().play();
+}
+
+function loadRabbidIdle() {
+  return loadFbx(RABBID_IDLE_FBX_PATH, "rabbid idle fbx")
+    .then(fbx => {
+      rabbidIdleModel = fbx;
+      prepareMaterials(rabbidIdleModel);
+      applyRabbidTransform(rabbidIdleModel);
+      scene.add(rabbidIdleModel);
+
+      if (fbx.animations && fbx.animations.length) {
+        rabbidIdleMixer = new THREE.AnimationMixer(rabbidIdleModel);
+        rabbidIdleAction = rabbidIdleMixer.clipAction(fbx.animations[0]);
+        rabbidIdleAction.setLoop(THREE.LoopRepeat, Infinity);
+        rabbidIdleAction.clampWhenFinished = false;
+        rabbidIdleAction.enabled = true;
+        rabbidIdleAction.play();
+        console.log("[RABBID IDLE FBX READY]", { clips: fbx.animations.length });
+      } else {
+        console.warn("[RABBID IDLE FBX ANIMATION MISSING]", { userAgent: navigator.userAgent });
+      }
+    });
+}
+
+function loadRabbidEvent() {
+  return loadGltf(RABBID_PATH, "rabbid event glb")
     .then(gltf => {
-      const rabbid = gltf.scene;
-      prepareMaterials(rabbid);
-      rabbid.position.set(0.0501, -0.5050, 0.5041);
-      rabbid.scale.setScalar(0.038);
-      rabbid.rotation.y = -4.676 + Math.PI - 0.42; // Rabbid looks more to its own right
-      scene.add(rabbid);
-      addRabbidSoftLight(rabbid.position);
+      rabbidEventModel = gltf.scene;
+      prepareMaterials(rabbidEventModel);
+      applyRabbidTransform(rabbidEventModel);
+      rabbidEventModel.visible = false;
+      scene.add(rabbidEventModel);
+
       if (gltf.animations && gltf.animations.length) {
-        rabbidMixer = new THREE.AnimationMixer(rabbid);
-        rabbidClips  = gltf.animations;
-        rabbidAction = rabbidMixer.clipAction(rabbidClips[0]);
-        rabbidAction.setLoop(THREE.LoopOnce, 1);
-        rabbidAction.clampWhenFinished = false;
-        rabbidAction.enabled = true;
-        rabbidNextPlayAt = performance.now() + RABBID_PLAY_INTERVAL_MS;
-        console.log("[RABBID ANIMATION READY]", {
+        rabbidEventMixer = new THREE.AnimationMixer(rabbidEventModel);
+        rabbidEventAction = rabbidEventMixer.clipAction(gltf.animations[0]);
+        rabbidEventAction.setLoop(THREE.LoopOnce, 1);
+        rabbidEventAction.clampWhenFinished = false;
+        rabbidEventAction.enabled = true;
+        rabbidEventAction.paused = true;
+
+        rabbidEventMixer.addEventListener("finished", event => {
+          if (event.action !== rabbidEventAction) return;
+          rabbidEventAction.stop();
+          rabbidEventAction.enabled = false;
+          rabbidEventPlaying = false;
+          setRabbidMode("idle");
+        });
+
+        console.log("[RABBID EVENT GLB READY]", {
           clips: gltf.animations.length,
           nextPlayMs: RABBID_PLAY_INTERVAL_MS,
         });
-        rabbidMixer.addEventListener("finished", event => {
-          if (event.action === rabbidAction) rabbidAction.enabled = false;
-        });
       } else {
-        console.warn("[RABBID ANIMATION MISSING]", {
+        console.warn("[RABBID EVENT GLB ANIMATION MISSING]", {
           animations: gltf.animations ? gltf.animations.length : 0,
           userAgent: navigator.userAgent,
         });
       }
-    })
-    .catch(err => console.error("Rabbid:", err));
+    });
+}
+
+function loadRabbid() {
+  addRabbidSoftLight(RABBID_POS);
+  Promise.allSettled([loadRabbidIdle(), loadRabbidEvent()])
+    .then(results => {
+      results.forEach(result => {
+        if (result.status === "rejected") console.error("Rabbid:", result.reason);
+      });
+      if (rabbidIdleModel) {
+        setRabbidMode("idle");
+      } else if (rabbidEventModel) {
+        rabbidEventModel.visible = true;
+      }
+      rabbidNextPlayAt = performance.now() + RABBID_PLAY_INTERVAL_MS;
+    });
 }
 
 function addRabbidSoftLight(pos) {
@@ -871,16 +956,16 @@ function animate() {
   rainSystem.update(delta);
 
   _syncAudioLocation(); // position-based inside/outside check
-  if (rabbidMixer) {
-    rabbidMixer.update(Math.min(realDelta, RABBID_MIXER_MAX_STEP));
+  const rabbidDelta = Math.min(realDelta, RABBID_MIXER_MAX_STEP);
+  if (rabbidIdleMixer && !rabbidEventPlaying) rabbidIdleMixer.update(rabbidDelta);
+  if (rabbidEventMixer && rabbidEventPlaying) rabbidEventMixer.update(rabbidDelta);
 
-    const now = performance.now();
-    if (!rabbidNextPlayAt) rabbidNextPlayAt = now + RABBID_PLAY_INTERVAL_MS;
+  const now = performance.now();
+  if (!rabbidNextPlayAt) rabbidNextPlayAt = now + RABBID_PLAY_INTERVAL_MS;
 
-    if (rabbidAction && now >= rabbidNextPlayAt && !rabbidAction.isRunning()) {
-      rabbidNextPlayAt = now + RABBID_PLAY_INTERVAL_MS;
-      playRabbidOnce();
-    }
+  if (rabbidEventAction && now >= rabbidNextPlayAt && !rabbidEventPlaying) {
+    rabbidNextPlayAt = now + RABBID_PLAY_INTERVAL_MS;
+    playRabbidOnce();
   }
   composer.render();
 }
