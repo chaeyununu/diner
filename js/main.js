@@ -14,6 +14,8 @@ const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
 // ?? Route presets ?????????????????????????????????????????????????
 // frontEntry: approach from diner entrance ??walk in ??turn left ??booth tour
 const FRONT_ENTRY = [
+  // 시작점을 더 뒤(화면 쪽 / 바깥쪽)로 밀어서 Entrance 직선 진입 구간을 더 길게 만듦
+  { id: "OUT0", x:  1.58, y: -0.7071, z: 12.80, yaw:  0.01,  pitch:  0.00, fov: 60 },
   { id: "OUT1", x:  1.58, y: -0.7071, z:  9.20, yaw:  0.01,  pitch:  0.00, fov: 59 },
   { id: "OUT2", x:  1.58, y: -0.7071, z:  6.40, yaw:  0.01,  pitch:  0.00, fov: 58 },
   { id: "OUT3", x:  1.54, y: -0.7071, z:  3.85, yaw:  0.03,  pitch:  0.01, fov: 57 },
@@ -889,7 +891,3 @@ createUI();
 audioSystem = initAudio(setWeatherMode);
 loadDiner();
 animate();
-
-
-
-
