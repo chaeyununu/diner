@@ -121,7 +121,7 @@ const RABBID_PLAY_INTERVAL_MS = 5 * 60 * 1000;
 const RABBID_IS_IPAD_LIKE = /iPad/i.test(navigator.userAgent)
   || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 const RABBID_MIXER_MAX_STEP = RABBID_IS_IPAD_LIKE ? 1 / 10 : 1 / 12;
-const RABBID_EVENT_TIME_SCALE = 0.58; // 5-minute event animation playback speed; interval stays unchanged
+const RABBID_EVENT_TIME_SCALE = 0.58; // 5-minute interval stays the same; only the one-shot event plays slower
 const RABBID_BREATH_DEVICE_BOOST = RABBID_IS_IPAD_LIKE ? 1.16 : 1.0;
 const RABBID_BASE_SCALE = 0.038;
 const RABBID_BODY_BREATH_SPEED = 0.00092; // slower, heavier inhale/exhale
@@ -781,7 +781,11 @@ function addCeilingLightFixtures(root) {
 
   [-1.4, 0, 1.4, 2.8].forEach(dz => {
     const mat = baseMat.clone();
-    if (mat.emissive) mat.emissive.setHex(0xFF3838); else mat.emissive = new THREE.Color(0xFF3838);
+    // Entrance-side three connected fluorescent tubes only: 0, 1.4, 2.8.
+    // Keep the remaining rear tube cyan so only the entrance-side group changes in rain mode.
+    const isEntranceFluorescent = dz >= 0;
+    const rainTubeColor = isEntranceFluorescent ? 0xFF3838 : 0x48C8D8;
+    if (mat.emissive) mat.emissive.setHex(rainTubeColor); else mat.emissive = new THREE.Color(rainTubeColor);
     mat.emissiveIntensity = 5.0;
     mat.needsUpdate = true;
 
@@ -795,7 +799,7 @@ function addCeilingLightFixtures(root) {
     _ceilGlowMeshes.push(mesh);
 
     // PointLight for actual illumination — rain only, sunny=0
-    const pt = new THREE.PointLight(0xFF3838, 0, 7.5);
+    const pt = new THREE.PointLight(rainTubeColor, 0, 7.5);
     pt.position.set(anchorX, placeY - 0.12, anchorZ + dz);
     scene.add(pt);
     _interiorLights.push({ light: pt, rain: 0.28, sunny: 0 });
