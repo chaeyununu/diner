@@ -122,12 +122,12 @@ const RABBID_MIXER_MAX_STEP = RABBID_IS_IPAD_LIKE ? 1 / 10 : 1 / 12;
 const RABBID_BREATH_DEVICE_BOOST = RABBID_IS_IPAD_LIKE ? 1.28 : 1.0;
 const RABBID_BASE_SCALE = 0.038;
 const RABBID_BODY_BREATH_SPEED = 0.0030;
-const RABBID_BODY_BREATH_UP = 0.220;       // belly/body: stronger visible inhale lift
-const RABBID_BODY_BREATH_FORWARD = 0.260;  // belly/body: stronger forward breathing push
-const RABBID_SHOULDER_BREATH_UP = 0.105;   // shoulder/upper chest rises clearly
-const RABBID_SHOULDER_BREATH_FORWARD = 0.060;
-const RABBID_HEAD_FOLLOW_UP = 0.034;       // head follows, but less than shoulders/body
-const RABBID_HEAD_FOLLOW_FORWARD = 0.030;
+const RABBID_BODY_BREATH_UP = 0.245;       // belly/body: stronger up motion, but no whole-model scaling
+const RABBID_BODY_BREATH_FORWARD = 0.335;  // belly/body: stronger forward breathing push
+const RABBID_SHOULDER_BREATH_UP = 0.235;   // shoulders rise much more clearly
+const RABBID_SHOULDER_BREATH_FORWARD = 0.175;
+const RABBID_HEAD_STABILIZE_UP = -0.145;   // counter-move neck/head so the head barely moves
+const RABBID_HEAD_STABILIZE_FORWARD = -0.120;
 
 const clock = new THREE.Clock();
 
@@ -444,7 +444,7 @@ function setupRabbidBodyBreathingBone(root) {
 
   // Stomach drives the belly motion.
   // Spine2 + clavicles drive the visible shoulder/upper-chest inhale.
-  // Neck/Head follows only a little, so the head does not look frozen or detached.
+  // Neck/Head is counter-stabilized so the head barely moves while shoulders/belly breathe.
   root.traverse(obj => {
     const name = obj.name || "";
 
@@ -511,8 +511,9 @@ function updateRabbidProceduralBreathing() {
   if (!rabbidRoot || rabbidEventPlaying) return;
   if (!rabbidBreathBone || !rabbidBreathBoneBasePos) return;
 
-  // Stronger inhale/exhale: belly pushes forward, upper chest/shoulders visibly rise,
-  // and the head follows only slightly. performance.now() keeps the breathing pace
+  // Stronger inhale/exhale: belly pushes forward/up and shoulders visibly rise.
+  // Neck/head is counter-moved so it does not look like the whole Rabbid is becoming taller/shorter.
+  // performance.now() keeps the breathing pace
   // stable even when iPad frame rate drops.
   const t = performance.now() * RABBID_BODY_BREATH_SPEED;
   const pulse = (Math.sin(t) + 1) * 0.5;
@@ -530,7 +531,9 @@ function updateRabbidProceduralBreathing() {
       const base = rabbidShoulderBreathBasePos[i];
       if (!base) return;
       const name = bone.name || "";
-      const spineWeight = /Spine2/i.test(name) ? 1.0 : 0.82;
+      // Spine2 moves only a little; clavicles carry most of the shoulder lift.
+      // This avoids the “whole character got taller/shorter” feeling.
+      const spineWeight = /Spine2/i.test(name) ? 0.18 : 1.0;
       bone.position.set(
         base.x,
         base.y + softPulse * RABBID_SHOULDER_BREATH_UP * boost * spineWeight,
@@ -542,8 +545,8 @@ function updateRabbidProceduralBreathing() {
   if (rabbidHeadFollowBone && rabbidHeadFollowBoneBasePos) {
     rabbidHeadFollowBone.position.set(
       rabbidHeadFollowBoneBasePos.x,
-      rabbidHeadFollowBoneBasePos.y + softPulse * RABBID_HEAD_FOLLOW_UP * boost,
-      rabbidHeadFollowBoneBasePos.z + softPulse * RABBID_HEAD_FOLLOW_FORWARD * boost
+      rabbidHeadFollowBoneBasePos.y + softPulse * RABBID_HEAD_STABILIZE_UP * boost,
+      rabbidHeadFollowBoneBasePos.z + softPulse * RABBID_HEAD_STABILIZE_FORWARD * boost
     );
   }
 }
