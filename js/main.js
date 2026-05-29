@@ -6,7 +6,7 @@ import { createCityBackdrop, setupBloom, setGroundWet, createFrontBackdrop, setW
 import { createExteriorRain } from "./rain-effect.js";
 import { initAudio } from "./audio.js";
 
-const VERSION = "20260530025500";
+const VERSION = "20260530031500";
 const STT_DINER_PATH = "./assets/models/sttdiner.glb?v=" + VERSION;
 const DINER_PATH  = "./assets/models/diners.glb?v=" + VERSION;
 const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
@@ -928,8 +928,8 @@ function addCeilingLightFixtures(root) {
   // light reaches nearby booths and gives the Rabbid face a slight red bounce.
   const startViewTubeCenters = [
     { x: 0.08,  z: 0.50, startViewGlow: true },
-    // Newly added tube only: moved toward the ENTRANCE start/outside direction.
-    { x: -1.05, z: 1.05, startViewGlow: true },
+    // Newly added tube only: nudged slightly back toward the removed neighboring tube direction.
+    { x: -0.92, z: 1.10, startViewGlow: true },
   ];
 
   startViewTubeCenters.forEach(target => {
@@ -943,9 +943,21 @@ function addCeilingLightFixtures(root) {
     }
   });
 
+  // Remove the extra tube that sits just behind the original start-view tube,
+  // toward the Rabbid's back side. Keep the first/original tube and the newly adjusted tube.
+  for (let i = tableCenters.length - 1; i >= 0; i--) {
+    const c = tableCenters[i];
+    const isFirstStartTube = Math.abs(c.x - 0.08) < 0.18 && Math.abs(c.z - 0.50) < 0.20;
+    const isMovedAddedTube = Math.abs(c.x + 0.92) < 0.18 && Math.abs(c.z - 1.10) < 0.20;
+    const isRabbidBackSideNeighbor = Math.abs(c.x - 0.08) < 0.65 && c.z < 0.10 && c.z > -1.35;
+    if (!isFirstStartTube && !isMovedAddedTube && isRabbidBackSideNeighbor) {
+      tableCenters.splice(i, 1);
+    }
+  }
+
   tableCenters.forEach(c => {
     const isOriginalStartTube = Math.abs(c.x - 0.08) < 0.18 && Math.abs(c.z - 0.50) < 0.20;
-    const isAddedStartTube = Math.abs(c.x + 1.05) < 0.18 && Math.abs(c.z - 1.05) < 0.20;
+    const isAddedStartTube = Math.abs(c.x + 0.92) < 0.18 && Math.abs(c.z - 1.10) < 0.20;
     if (isOriginalStartTube || isAddedStartTube) {
       c.startViewGlow = true;
     }
