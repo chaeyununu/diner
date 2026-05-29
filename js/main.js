@@ -6,7 +6,7 @@ import { createCityBackdrop, setupBloom, setGroundWet, createFrontBackdrop, setW
 import { createExteriorRain } from "./rain-effect.js";
 import { initAudio } from "./audio.js";
 
-const VERSION = "20260530032500";
+const VERSION = "20260530033500";
 const STT_DINER_PATH = "./assets/models/sttdiner.glb?v=" + VERSION;
 const DINER_PATH  = "./assets/models/diners.glb?v=" + VERSION;
 const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
@@ -934,8 +934,8 @@ function addCeilingLightFixtures(root) {
   // Start-view tube: keep only the adjusted entrance-side tube.
   // The lower circled tube at x 0.08 / z 0.50 is intentionally removed below.
   const startViewTubeCenters = [
-    // Newly added tube only: moved a hair back from the ENTRANCE start side and strongly toward the removed circled tube side.
-    { x: -0.30, z: 1.11, startViewGlow: true },
+    // Newly added tube only: moved a tiny amount toward the ENTRANCE start side and strongly toward the removed circled tube side.
+    { x: -0.30, z: 1.15, startViewGlow: true },
   ];
 
   startViewTubeCenters.forEach(target => {
@@ -955,7 +955,7 @@ function addCeilingLightFixtures(root) {
   for (let i = tableCenters.length - 1; i >= 0; i--) {
     const c = tableCenters[i];
     const isCircledStartTube = Math.abs(c.x - 0.08) < 0.22 && Math.abs(c.z - 0.50) < 0.28;
-    const isMovedAddedTube = Math.abs(c.x + 0.30) < 0.18 && Math.abs(c.z - 1.11) < 0.20;
+    const isMovedAddedTube = Math.abs(c.x + 0.30) < 0.18 && Math.abs(c.z - 1.13) < 0.20;
     const isRabbidBackSideNeighbor = Math.abs(c.x - 0.08) < 0.65 && c.z < 0.10 && c.z > -1.35;
     if (!isMovedAddedTube && (isCircledStartTube || isRabbidBackSideNeighbor)) {
       tableCenters.splice(i, 1);
@@ -963,7 +963,7 @@ function addCeilingLightFixtures(root) {
   }
 
   tableCenters.forEach(c => {
-    const isAddedStartTube = Math.abs(c.x + 0.30) < 0.18 && Math.abs(c.z - 1.11) < 0.20;
+    const isAddedStartTube = Math.abs(c.x + 0.30) < 0.18 && Math.abs(c.z - 1.13) < 0.20;
     if (isAddedStartTube) {
       c.startViewGlow = true;
     }
@@ -1010,12 +1010,7 @@ function addCeilingLightFixtures(root) {
     }
   });
 
-  // Very subtle red spill toward the Rabbid face, caused by the two start-view tubes.
-  // Rain-only, so sunny mode stays unchanged.
-  const rabbidFaceRedSpill = new THREE.PointLight(0xff4a3a, 0, 2.7);
-  rabbidFaceRedSpill.position.set(0.33, 0.18, 0.62);
-  scene.add(rabbidFaceRedSpill);
-  _interiorLights.push({ light: rabbidFaceRedSpill, rain: 0.13, sunny: 0 });
+  // Rabbid-face-specific red spill removed. The start-view tube lights remain rain-only.
 
 }
 
