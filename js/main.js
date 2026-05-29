@@ -922,13 +922,39 @@ function addCeilingLightFixtures(root) {
   }
 
   const tableCenters = getTableSetCenters();
+
+  // Start-view pair: keep the already visible tube, then add one more tube with
+  // the same Y/Z and only a different X. These two get wider red spill so the
+  // light reaches nearby booths and gives the Rabbid face a slight red bounce.
+  const startViewTubeCenters = [
+    { x: 0.08,  z: 0.50, startViewGlow: true },
+    { x: -1.05, z: 0.50, startViewGlow: true },
+  ];
+
+  startViewTubeCenters.forEach(target => {
+    const existing = tableCenters.find(c =>
+      Math.abs(c.x - target.x) < 0.16 && Math.abs(c.z - target.z) < 0.16
+    );
+    if (existing) {
+      existing.startViewGlow = true;
+    } else {
+      tableCenters.push(target);
+    }
+  });
+
+  tableCenters.forEach(c => {
+    if (Math.abs(c.z - 0.50) < 0.20 && (Math.abs(c.x - 0.08) < 0.18 || Math.abs(c.x + 1.05) < 0.18)) {
+      c.startViewGlow = true;
+    }
+  });
+
   console.log('[TABLE FLUORESCENTS]', tableCenters.length, tableCenters);
 
-  tableCenters.forEach(({ x, z }) => {
+  tableCenters.forEach(({ x, z, startViewGlow = false }) => {
     const mat = baseMat.clone();
     if (mat.emissive) mat.emissive.setHex(tableTubeColor);
     else mat.emissive = new THREE.Color(tableTubeColor);
-    mat.emissiveIntensity = 5.0;
+    mat.emissiveIntensity = startViewGlow ? 7.2 : 5.0;
     mat.needsUpdate = true;
 
     const mesh = new THREE.Mesh(tplMesh.geometry, mat);
@@ -940,10 +966,17 @@ function addCeilingLightFixtures(root) {
     scene.add(mesh);
     _ceilGlowMeshes.push(mesh);
 
-    const pt = new THREE.PointLight(tableTubeColor, 0, 4.8);
+    const pt = new THREE.PointLight(tableTubeColor, 0, startViewGlow ? 9.2 : 4.8);
     pt.position.set(x, tableTubeY - 0.12, z);
     scene.add(pt);
-    _interiorLights.push({ light: pt, rain: 0.22, sunny: 0 });
+    _interiorLights.push({ light: pt, rain: startViewGlow ? 0.46 : 0.22, sunny: 0 });
+
+    if (startViewGlow) {
+      const bounce = new THREE.PointLight(0xff5a48, 0, 7.2);
+      bounce.position.set(x, tableTubeY - 0.62, z + 0.10);
+      scene.add(bounce);
+      _interiorLights.push({ light: bounce, rain: 0.14, sunny: 0 });
+    }
   });
 
 }
