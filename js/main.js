@@ -113,21 +113,25 @@ let rabbidBreathBone = null;
 let rabbidBreathBoneBasePos = null;
 let rabbidShoulderBreathBones = [];
 let rabbidShoulderBreathBasePos = [];
+let rabbidUpperArmBreathBones = [];
+let rabbidUpperArmBreathBasePos = [];
 let rabbidHeadFollowBone = null;
 let rabbidHeadFollowBoneBasePos = null;
 const RABBID_PLAY_INTERVAL_MS = 5 * 60 * 1000;
 const RABBID_IS_IPAD_LIKE = /iPad/i.test(navigator.userAgent)
   || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 const RABBID_MIXER_MAX_STEP = RABBID_IS_IPAD_LIKE ? 1 / 10 : 1 / 12;
-const RABBID_BREATH_DEVICE_BOOST = RABBID_IS_IPAD_LIKE ? 1.28 : 1.0;
+const RABBID_BREATH_DEVICE_BOOST = RABBID_IS_IPAD_LIKE ? 1.16 : 1.0;
 const RABBID_BASE_SCALE = 0.038;
-const RABBID_BODY_BREATH_SPEED = 0.0030;
-const RABBID_BODY_BREATH_UP = 0.245;       // belly/body: stronger up motion, but no whole-model scaling
-const RABBID_BODY_BREATH_FORWARD = 0.335;  // belly/body: stronger forward breathing push
-const RABBID_SHOULDER_BREATH_UP = 0.235;   // shoulders rise much more clearly
-const RABBID_SHOULDER_BREATH_FORWARD = 0.175;
-const RABBID_HEAD_STABILIZE_UP = -0.145;   // counter-move neck/head so the head barely moves
-const RABBID_HEAD_STABILIZE_FORWARD = -0.120;
+const RABBID_BODY_BREATH_SPEED = 0.00092; // slower, heavier inhale/exhale
+const RABBID_BODY_BREATH_UP = 0.325;       // belly only: up motion without whole-model scaling
+const RABBID_BODY_BREATH_FORWARD = 0.455;  // belly only: forward breathing push
+const RABBID_SHOULDER_BREATH_UP = 0.620;   // clavicle/shoulder only: large visible shrug upward
+const RABBID_SHOULDER_BREATH_FORWARD = 0.245;
+const RABBID_UPPER_ARM_BREATH_UP = 0.255;  // small follow-through so shoulder area looks attached
+const RABBID_UPPER_ARM_BREATH_FORWARD = 0.065;
+const RABBID_HEAD_STABILIZE_UP = 0.0;     // do not procedurally move the head/neck
+const RABBID_HEAD_STABILIZE_FORWARD = 0.0;
 
 const clock = new THREE.Clock();
 
@@ -439,12 +443,14 @@ function setupRabbidBodyBreathingBone(root) {
   rabbidBreathBoneBasePos = null;
   rabbidShoulderBreathBones = [];
   rabbidShoulderBreathBasePos = [];
+  rabbidUpperArmBreathBones = [];
+  rabbidUpperArmBreathBasePos = [];
   rabbidHeadFollowBone = null;
   rabbidHeadFollowBoneBasePos = null;
 
   // Stomach drives the belly motion.
-  // Spine2 + clavicles drive the visible shoulder/upper-chest inhale.
-  // Neck/Head is counter-stabilized so the head barely moves while shoulders/belly breathe.
+  // Clavicles make the visible shoulder shrug; upper arms follow slightly so the shoulder area does not look detached.
+  // Spine2/Neck/Head are not moved procedurally, so the whole Rabbid does not look taller/shorter.
   root.traverse(obj => {
     const name = obj.name || "";
 
@@ -452,8 +458,12 @@ function setupRabbidBodyBreathingBone(root) {
       rabbidBreathBone = obj;
     }
 
-    if (/Spine2|L_Clavicle|R_Clavicle/i.test(name)) {
+    if (/L_Clavicle|R_Clavicle/i.test(name)) {
       rabbidShoulderBreathBones.push(obj);
+    }
+
+    if (/L_UpperArm|R_UpperArm/i.test(name)) {
+      rabbidUpperArmBreathBones.push(obj);
     }
 
     // Prefer neck, because it moves the head/ears/eyes together more naturally.
@@ -482,7 +492,12 @@ function setupRabbidBodyBreathingBone(root) {
     rabbidShoulderBreathBasePos = rabbidShoulderBreathBones.map(bone => bone.position.clone());
     console.log("[RABBID SHOULDER BREATH BONES]", rabbidShoulderBreathBones.map(bone => bone.name));
   } else {
-    console.warn("[RABBID SHOULDER BREATH BONES MISSING] Spine2/Clavicle bones not found.");
+    console.warn("[RABBID SHOULDER BREATH BONES MISSING] Clavicle bones not found.");
+  }
+
+  if (rabbidUpperArmBreathBones.length) {
+    rabbidUpperArmBreathBasePos = rabbidUpperArmBreathBones.map(bone => bone.position.clone());
+    console.log("[RABBID UPPER ARM FOLLOW BONES]", rabbidUpperArmBreathBones.map(bone => bone.name));
   }
 
   if (rabbidHeadFollowBone) {
@@ -502,6 +517,11 @@ function resetRabbidBodyBreathing() {
       if (rabbidShoulderBreathBasePos[i]) bone.position.copy(rabbidShoulderBreathBasePos[i]);
     });
   }
+  if (rabbidUpperArmBreathBones.length && rabbidUpperArmBreathBasePos.length) {
+    rabbidUpperArmBreathBones.forEach((bone, i) => {
+      if (rabbidUpperArmBreathBasePos[i]) bone.position.copy(rabbidUpperArmBreathBasePos[i]);
+    });
+  }
   if (rabbidHeadFollowBone && rabbidHeadFollowBoneBasePos) {
     rabbidHeadFollowBone.position.copy(rabbidHeadFollowBoneBasePos);
   }
@@ -511,10 +531,8 @@ function updateRabbidProceduralBreathing() {
   if (!rabbidRoot || rabbidEventPlaying) return;
   if (!rabbidBreathBone || !rabbidBreathBoneBasePos) return;
 
-  // Stronger inhale/exhale: belly pushes forward/up and shoulders visibly rise.
-  // Neck/head is counter-moved so it does not look like the whole Rabbid is becoming taller/shorter.
-  // performance.now() keeps the breathing pace
-  // stable even when iPad frame rate drops.
+  // Slower inhale/exhale: belly + clavicles move strongly, but Spine2/Neck/Head stay stable.
+  // performance.now() keeps the breathing pace stable even when iPad frame rate drops.
   const t = performance.now() * RABBID_BODY_BREATH_SPEED;
   const pulse = (Math.sin(t) + 1) * 0.5;
   const softPulse = pulse * pulse * (3 - 2 * pulse);
@@ -530,25 +548,28 @@ function updateRabbidProceduralBreathing() {
     rabbidShoulderBreathBones.forEach((bone, i) => {
       const base = rabbidShoulderBreathBasePos[i];
       if (!base) return;
-      const name = bone.name || "";
-      // Spine2 moves only a little; clavicles carry most of the shoulder lift.
-      // This avoids the “whole character got taller/shorter” feeling.
-      const spineWeight = /Spine2/i.test(name) ? 0.18 : 1.0;
       bone.position.set(
         base.x,
-        base.y + softPulse * RABBID_SHOULDER_BREATH_UP * boost * spineWeight,
-        base.z + softPulse * RABBID_SHOULDER_BREATH_FORWARD * boost * spineWeight
+        base.y + softPulse * RABBID_SHOULDER_BREATH_UP * boost,
+        base.z + softPulse * RABBID_SHOULDER_BREATH_FORWARD * boost
       );
     });
   }
 
-  if (rabbidHeadFollowBone && rabbidHeadFollowBoneBasePos) {
-    rabbidHeadFollowBone.position.set(
-      rabbidHeadFollowBoneBasePos.x,
-      rabbidHeadFollowBoneBasePos.y + softPulse * RABBID_HEAD_STABILIZE_UP * boost,
-      rabbidHeadFollowBoneBasePos.z + softPulse * RABBID_HEAD_STABILIZE_FORWARD * boost
-    );
+  if (rabbidUpperArmBreathBones.length && rabbidUpperArmBreathBasePos.length) {
+    rabbidUpperArmBreathBones.forEach((bone, i) => {
+      const base = rabbidUpperArmBreathBasePos[i];
+      if (!base) return;
+      bone.position.set(
+        base.x,
+        base.y + softPulse * RABBID_UPPER_ARM_BREATH_UP * boost,
+        base.z + softPulse * RABBID_UPPER_ARM_BREATH_FORWARD * boost
+      );
+    });
   }
+
+  // Do not move Neck/Head here. The GLB idle clip can keep its original face/eye motion,
+  // while the procedural breath stays limited to belly + shoulder bones.
 }
 
 function loadRabbid() {
