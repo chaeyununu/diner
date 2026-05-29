@@ -6,7 +6,7 @@ import { createCityBackdrop, setupBloom, setGroundWet, createFrontBackdrop, setW
 import { createExteriorRain } from "./rain-effect.js";
 import { initAudio } from "./audio.js";
 
-const VERSION = "20260530031500";
+const VERSION = "20260530032500";
 const STT_DINER_PATH = "./assets/models/sttdiner.glb?v=" + VERSION;
 const DINER_PATH  = "./assets/models/diners.glb?v=" + VERSION;
 const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
@@ -926,7 +926,7 @@ function addCeilingLightFixtures(root) {
   // The lower circled tube at x 0.08 / z 0.50 is intentionally removed below.
   const startViewTubeCenters = [
     // Newly added tube only: moved slightly toward the ENTRANCE start side and strongly toward the removed circled tube side.
-    { x: -0.18, z: 1.22, startViewGlow: true },
+    { x: -0.18, z: 1.08, startViewGlow: true },
   ];
 
   startViewTubeCenters.forEach(target => {
@@ -946,7 +946,7 @@ function addCeilingLightFixtures(root) {
   for (let i = tableCenters.length - 1; i >= 0; i--) {
     const c = tableCenters[i];
     const isCircledStartTube = Math.abs(c.x - 0.08) < 0.22 && Math.abs(c.z - 0.50) < 0.28;
-    const isMovedAddedTube = Math.abs(c.x + 0.18) < 0.18 && Math.abs(c.z - 1.22) < 0.20;
+    const isMovedAddedTube = Math.abs(c.x + 0.18) < 0.18 && Math.abs(c.z - 1.08) < 0.20;
     const isRabbidBackSideNeighbor = Math.abs(c.x - 0.08) < 0.65 && c.z < 0.10 && c.z > -1.35;
     if (!isMovedAddedTube && (isCircledStartTube || isRabbidBackSideNeighbor)) {
       tableCenters.splice(i, 1);
@@ -954,7 +954,7 @@ function addCeilingLightFixtures(root) {
   }
 
   tableCenters.forEach(c => {
-    const isAddedStartTube = Math.abs(c.x + 0.18) < 0.18 && Math.abs(c.z - 1.22) < 0.20;
+    const isAddedStartTube = Math.abs(c.x + 0.18) < 0.18 && Math.abs(c.z - 1.08) < 0.20;
     if (isAddedStartTube) {
       c.startViewGlow = true;
     }
@@ -973,6 +973,16 @@ function addCeilingLightFixtures(root) {
     mesh.position.set(x, tableTubeY, z);
     mesh.quaternion.copy(wQuat);
     mesh.scale.copy(wScale);
+    if (startViewGlow) {
+      const geom = tplMesh.geometry;
+      if (!geom.boundingBox) geom.computeBoundingBox();
+      const tubeSize = new THREE.Vector3();
+      geom.boundingBox.getSize(tubeSize);
+      const longAxis = tubeSize.x >= tubeSize.y && tubeSize.x >= tubeSize.z
+        ? "x"
+        : (tubeSize.y >= tubeSize.z ? "y" : "z");
+      mesh.scale[longAxis] *= 1.28;
+    }
     mesh.frustumCulled = false;
     mesh.visible = weatherMode === "rain";
     scene.add(mesh);
