@@ -911,7 +911,6 @@ function addCeilingLightFixtures(root) {
     // the same booth/table line visible in this diner scene, not the wall seam.
     if (deduped.length === 0) {
       return [
-        { x: 0.08, z: 0.50 },
         { x: 0.08, z: -0.72 },
         { x: 0.08, z: -1.94 },
         { x: 0.08, z: -3.16 },
@@ -923,13 +922,11 @@ function addCeilingLightFixtures(root) {
 
   const tableCenters = getTableSetCenters();
 
-  // Start-view pair: keep the already visible tube, then add one more tube with
-  // the same Y/Z and only a different X. These two get wider red spill so the
-  // light reaches nearby booths and gives the Rabbid face a slight red bounce.
+  // Start-view tube: keep only the adjusted entrance-side tube.
+  // The lower circled tube at x 0.08 / z 0.50 is intentionally removed below.
   const startViewTubeCenters = [
-    { x: 0.08,  z: 0.50, startViewGlow: true },
-    // Newly added tube only: nudged slightly back toward the removed neighboring tube direction.
-    { x: -0.92, z: 1.10, startViewGlow: true },
+    // Newly added tube only: moved slightly toward the ENTRANCE start side and strongly toward the removed circled tube side.
+    { x: -0.18, z: 1.22, startViewGlow: true },
   ];
 
   startViewTubeCenters.forEach(target => {
@@ -943,22 +940,22 @@ function addCeilingLightFixtures(root) {
     }
   });
 
-  // Remove the extra tube that sits just behind the original start-view tube,
-  // toward the Rabbid's back side. Keep the first/original tube and the newly adjusted tube.
+  // Remove the circled lower/near start-view tube.
+  // It used to stay because it was protected as the first/original start tube.
+  // Keep only the adjusted added tube near the entrance side.
   for (let i = tableCenters.length - 1; i >= 0; i--) {
     const c = tableCenters[i];
-    const isFirstStartTube = Math.abs(c.x - 0.08) < 0.18 && Math.abs(c.z - 0.50) < 0.20;
-    const isMovedAddedTube = Math.abs(c.x + 0.92) < 0.18 && Math.abs(c.z - 1.10) < 0.20;
+    const isCircledStartTube = Math.abs(c.x - 0.08) < 0.22 && Math.abs(c.z - 0.50) < 0.28;
+    const isMovedAddedTube = Math.abs(c.x + 0.18) < 0.18 && Math.abs(c.z - 1.22) < 0.20;
     const isRabbidBackSideNeighbor = Math.abs(c.x - 0.08) < 0.65 && c.z < 0.10 && c.z > -1.35;
-    if (!isFirstStartTube && !isMovedAddedTube && isRabbidBackSideNeighbor) {
+    if (!isMovedAddedTube && (isCircledStartTube || isRabbidBackSideNeighbor)) {
       tableCenters.splice(i, 1);
     }
   }
 
   tableCenters.forEach(c => {
-    const isOriginalStartTube = Math.abs(c.x - 0.08) < 0.18 && Math.abs(c.z - 0.50) < 0.20;
-    const isAddedStartTube = Math.abs(c.x + 0.92) < 0.18 && Math.abs(c.z - 1.10) < 0.20;
-    if (isOriginalStartTube || isAddedStartTube) {
+    const isAddedStartTube = Math.abs(c.x + 0.18) < 0.18 && Math.abs(c.z - 1.22) < 0.20;
+    if (isAddedStartTube) {
       c.startViewGlow = true;
     }
   });
