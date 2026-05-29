@@ -779,12 +779,13 @@ function addCeilingLightFixtures(root) {
   const baseMat = (Array.isArray(tplMesh.material) ? tplMesh.material[0] : tplMesh.material);
   const placeY  = ceilingBottomY - 0.005;
 
-  [-1.4, 0, 1.4, 2.8].forEach(dz => {
+  // Keep the rear tube as-is, and keep only the middle tube of the
+  // entrance-side three connected fluorescent tubes.
+  // Removed entrance-side outer tubes: dz 0 and dz 2.8.
+  [-1.4, 1.4].forEach(dz => {
     const mat = baseMat.clone();
-    // Entrance-side three connected fluorescent tubes only: 0, 1.4, 2.8.
-    // Keep the remaining rear tube cyan so only the entrance-side group changes in rain mode.
-    const isEntranceFluorescent = dz >= 0;
-    const rainTubeColor = isEntranceFluorescent ? 0xFF3838 : 0x48C8D8;
+    const isMiddleEntranceFluorescent = dz === 1.4;
+    const rainTubeColor = isMiddleEntranceFluorescent ? 0xFF3838 : 0x48C8D8;
     if (mat.emissive) mat.emissive.setHex(rainTubeColor); else mat.emissive = new THREE.Color(rainTubeColor);
     mat.emissiveIntensity = 5.0;
     mat.needsUpdate = true;
@@ -803,6 +804,79 @@ function addCeilingLightFixtures(root) {
     pt.position.set(anchorX, placeY - 0.12, anchorZ + dz);
     scene.add(pt);
     _interiorLights.push({ light: pt, rain: 0.28, sunny: 0 });
+  });
+
+  // Window/table red tubes: one rain-only tube above each 2-chair + 1-table set.
+  // These sit between the window line and the ceiling, and do not affect sunny mode.
+  const windowTableTubeColor = 0xFF3838;
+  const windowTableTubeX = 3.28;
+  const windowTableTubeY = Math.min(ceilingBottomY - 0.28, 1.88);
+  const windowTableTubeLightX = windowTableTubeX - 0.28; // slightly inside the diner
+
+  function getTableSetZPositions() {
+    const centers = [];
+    const box = new THREE.Box3();
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+
+    root.traverse(obj => {
+      if (!obj.isMesh) return;
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      const n = ((obj.name || '') + ' ' + (mats[0]?.name || '')).toLowerCase();
+      const looksLikeTable = /table|tabletop|diner_top/.test(n)
+        && !/counter|bar|floor|wall|ceil|sign|menu|logo|light|lamp/.test(n);
+      if (!looksLikeTable) return;
+
+      box.setFromObject(obj);
+      box.getSize(size);
+      box.getCenter(center);
+
+      // Keep only table-height, booth/interior objects. This avoids accidental
+      // wall/floor/sign parts that include the word table in a material name.
+      if (center.y < 0.25 || center.y > 1.25) return;
+      if (center.z < -4.4 || center.z > 0.8) return;
+      if (size.x < 0.25 && size.z < 0.25) return;
+      centers.push(center.clone());
+    });
+
+    centers.sort((a, b) => a.z - b.z);
+    const groups = [];
+    centers.forEach(c => {
+      const last = groups[groups.length - 1];
+      if (!last || Math.abs(last.z - c.z) > 0.55) {
+        groups.push({ z: c.z, count: 1 });
+      } else {
+        last.z = (last.z * last.count + c.z) / (last.count + 1);
+        last.count += 1;
+      }
+    });
+
+    const detected = groups.map(g => g.z);
+    // Fallback for this diner layout if mesh/material names do not expose tables.
+    return detected.length >= 2 ? detected : [-0.65, -1.85, -3.05];
+  }
+
+  getTableSetZPositions().forEach(z => {
+    const mat = baseMat.clone();
+    if (mat.emissive) mat.emissive.setHex(windowTableTubeColor);
+    else mat.emissive = new THREE.Color(windowTableTubeColor);
+    mat.emissiveIntensity = 5.0;
+    mat.needsUpdate = true;
+
+    const mesh = new THREE.Mesh(tplMesh.geometry, mat);
+    mesh.position.set(windowTableTubeX, windowTableTubeY, z);
+    mesh.quaternion.copy(wQuat);
+    mesh.rotateY(Math.PI / 2);
+    mesh.scale.copy(wScale);
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    scene.add(mesh);
+    _ceilGlowMeshes.push(mesh);
+
+    const pt = new THREE.PointLight(windowTableTubeColor, 0, 4.8);
+    pt.position.set(windowTableTubeLightX, windowTableTubeY - 0.06, z);
+    scene.add(pt);
+    _interiorLights.push({ light: pt, rain: 0.22, sunny: 0 });
   });
 }
 
