@@ -808,7 +808,8 @@ function addCeilingLightFixtures(root) {
       const longAxis = tubeSize.x >= tubeSize.y && tubeSize.x >= tubeSize.z
         ? "x"
         : (tubeSize.y >= tubeSize.z ? "y" : "z");
-      mesh.scale[longAxis] *= 1.32;
+      // Neighbor tube only: make it longer than the recently adjusted added tube.
+      mesh.scale[longAxis] *= 1.68;
     }
     mesh.frustumCulled = false;
     mesh.visible = false;
