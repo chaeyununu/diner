@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { createCityBackdrop, setupBloom, setGroundWet, createFrontBackdrop, setWeatherBackdrop } from "./city-backdrop.js";
@@ -11,7 +10,6 @@ const VERSION = "20260528050000";
 const STT_DINER_PATH = "./assets/models/sttdiner.glb?v=" + VERSION;
 const DINER_PATH  = "./assets/models/diners.glb?v=" + VERSION;
 const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
-const RABBID_IDLE_FBX_PATH = "./assets/models/Idle.fbx?v=" + VERSION;
 
 // ?? Route presets ?????????????????????????????????????????????????
 // frontEntry: approach from diner entrance ??walk in ??turn left ??booth tour
@@ -100,28 +98,25 @@ fillLight.position.set(-5, 3, -4);
 scene.add(fillLight);
 
 const loader = new GLTFLoader();
-const fbxLoader = new FBXLoader();
 const dracoLoader = new DRACOLoader();
 dracoLoader.setDecoderPath("https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/libs/draco/");
 loader.setDRACOLoader(dracoLoader);
 
-// Rabbid placement shared by the breathing FBX and the original GLB.
-const RABBID_POS = new THREE.Vector3(0.0501, -0.5050, 0.5041);
-const RABBID_ROT_Y = -4.676 + Math.PI - 0.42; // Rabbid looks more to its own right
-const RABBID_SCALE = 0.038;
-
-let rabbidIdleModel = null;
-let rabbidIdleMixer = null;
+let rabbidRoot = null;
+let rabbidMixer = null;
+let rabbidClips  = [];
 let rabbidIdleAction = null;
-
-let rabbidEventModel = null;
-let rabbidEventMixer = null;
 let rabbidEventAction = null;
-
-let rabbidNextPlayAt = 0;
 let rabbidEventPlaying = false;
+let rabbidNextPlayAt = 0;
+let rabbidBreathBone = null;
+let rabbidBreathBoneBasePos = null;
 const RABBID_PLAY_INTERVAL_MS = 5 * 60 * 1000;
 const RABBID_MIXER_MAX_STEP = 1 / 30;
+const RABBID_BASE_SCALE = 0.038;
+const RABBID_BODY_BREATH_SPEED = 0.0018;
+const RABBID_BODY_BREATH_UP = 0.075;       // model-local units, subtle belly/body lift
+const RABBID_BODY_BREATH_FORWARD = 0.095;  // model-local units, subtle belly/body push forward
 
 const clock = new THREE.Clock();
 
@@ -384,14 +379,6 @@ function loadGltf(path, label) {
   });
 }
 
-function loadFbx(path, label) {
-  return new Promise((resolve, reject) => {
-    fbxLoader.load(path, resolve, undefined, err =>
-      reject(new Error(label + " load failed: " + String(err.message || err)))
-    );
-  });
-}
-
 function loadFirstGltf(paths, label) {
   return paths.reduce(
     (chain, path) => chain.catch(() => loadGltf(path, label)),
@@ -402,110 +389,137 @@ function loadFirstGltf(paths, label) {
 const loadingEl = document.getElementById("loading");
 function showLoading(msg) { if (loadingEl) loadingEl.innerHTML = msg; }
 
-// ── Rabbid: breathing FBX loops, original GLB replaces it once every 5 minutes ──
-function applyRabbidTransform(model) {
-  model.position.copy(RABBID_POS);
-  model.scale.setScalar(RABBID_SCALE);
-  model.rotation.y = RABBID_ROT_Y;
-  model.frustumCulled = false;
+// ── Rabbid: original GLB look + idle breathing loop + 5-minute event ─────────
+function findRabbidClip(pattern) {
+  return rabbidClips.find(clip => pattern.test(clip.name || ""));
 }
 
-function setRabbidMode(mode) {
-  const showIdle = mode !== "event";
-  if (rabbidIdleModel) rabbidIdleModel.visible = showIdle;
-  if (rabbidEventModel) rabbidEventModel.visible = !showIdle;
+function startRabbidIdle() {
+  if (!rabbidIdleAction) return;
+  rabbidIdleAction.enabled = true;
+  rabbidIdleAction.paused = false;
+  rabbidIdleAction.setLoop(THREE.LoopRepeat, Infinity);
+  rabbidIdleAction.clampWhenFinished = false;
+  rabbidIdleAction.timeScale = 0.72;
+  rabbidIdleAction.reset().fadeIn(0.18).play();
+}
 
-  if (rabbidIdleAction) {
-    rabbidIdleAction.paused = !showIdle;
-    if (showIdle && !rabbidIdleAction.isRunning()) rabbidIdleAction.play();
-  }
+function stopRabbidIdleForEvent() {
+  if (!rabbidIdleAction) return;
+  rabbidIdleAction.fadeOut(0.12);
 }
 
 function playRabbidOnce() {
   if (!rabbidEventAction || rabbidEventPlaying) return;
 
   rabbidEventPlaying = true;
-  setRabbidMode("event");
+  resetRabbidBodyBreathing();
+  stopRabbidIdleForEvent();
 
   rabbidEventAction.enabled = true;
   rabbidEventAction.paused = false;
-  rabbidEventAction.reset().play();
+  rabbidEventAction.setLoop(THREE.LoopOnce, 1);
+  rabbidEventAction.clampWhenFinished = false;
+  rabbidEventAction.reset().fadeIn(0.10).play();
 }
 
-function loadRabbidIdle() {
-  return loadFbx(RABBID_IDLE_FBX_PATH, "rabbid idle fbx")
-    .then(fbx => {
-      rabbidIdleModel = fbx;
-      prepareMaterials(rabbidIdleModel);
-      applyRabbidTransform(rabbidIdleModel);
-      scene.add(rabbidIdleModel);
+function setupRabbidBodyBreathingBone(root) {
+  rabbidBreathBone = null;
+  rabbidBreathBoneBasePos = null;
 
-      if (fbx.animations && fbx.animations.length) {
-        rabbidIdleMixer = new THREE.AnimationMixer(rabbidIdleModel);
-        rabbidIdleAction = rabbidIdleMixer.clipAction(fbx.animations[0]);
-        rabbidIdleAction.setLoop(THREE.LoopRepeat, Infinity);
-        rabbidIdleAction.clampWhenFinished = false;
-        rabbidIdleAction.enabled = true;
-        rabbidIdleAction.play();
-        console.log("[RABBID IDLE FBX READY]", { clips: fbx.animations.length });
-      } else {
-        console.warn("[RABBID IDLE FBX ANIMATION MISSING]", { userAgent: navigator.userAgent });
-      }
-    });
+  // This GLB has a separate Stomach_044 joint.
+  // Using this keeps the head/ears mostly untouched, unlike scaling the whole model.
+  root.traverse(obj => {
+    if (rabbidBreathBone) return;
+    const name = obj.name || "";
+    if (/Stomach/i.test(name)) rabbidBreathBone = obj;
+  });
+
+  if (rabbidBreathBone) {
+    rabbidBreathBoneBasePos = rabbidBreathBone.position.clone();
+    console.log("[RABBID BODY BREATH BONE]", rabbidBreathBone.name);
+  } else {
+    console.warn("[RABBID BODY BREATH BONE MISSING] Stomach bone not found.");
+  }
 }
 
-function loadRabbidEvent() {
-  return loadGltf(RABBID_PATH, "rabbid event glb")
+function resetRabbidBodyBreathing() {
+  if (!rabbidBreathBone || !rabbidBreathBoneBasePos) return;
+  rabbidBreathBone.position.copy(rabbidBreathBoneBasePos);
+}
+
+function updateRabbidProceduralBreathing() {
+  if (!rabbidRoot || rabbidEventPlaying) return;
+  if (!rabbidBreathBone || !rabbidBreathBoneBasePos) return;
+
+  // Body-only breathing: the belly/body joint moves slightly upward + forward.
+  // Head is not directly scaled or moved.
+  const t = performance.now() * RABBID_BODY_BREATH_SPEED;
+  const pulse = (Math.sin(t) + 1) * 0.5;
+  const softPulse = pulse * pulse * (3 - 2 * pulse);
+
+  rabbidBreathBone.position.set(
+    rabbidBreathBoneBasePos.x,
+    rabbidBreathBoneBasePos.y + softPulse * RABBID_BODY_BREATH_UP,
+    rabbidBreathBoneBasePos.z + softPulse * RABBID_BODY_BREATH_FORWARD
+  );
+}
+
+function loadRabbid() {
+  loadGltf(RABBID_PATH, "rabbid")
     .then(gltf => {
-      rabbidEventModel = gltf.scene;
-      prepareMaterials(rabbidEventModel);
-      applyRabbidTransform(rabbidEventModel);
-      rabbidEventModel.visible = false;
-      scene.add(rabbidEventModel);
+      const rabbid = gltf.scene;
+      rabbidRoot = rabbid;
+      prepareMaterials(rabbid);
+      rabbid.position.set(0.0501, -0.5050, 0.5041);
+      rabbid.scale.setScalar(RABBID_BASE_SCALE);
+      rabbid.rotation.y = -4.676 + Math.PI - 0.42; // Rabbid looks more to its own right
+      scene.add(rabbid);
+      setupRabbidBodyBreathingBone(rabbid);
+      addRabbidSoftLight(rabbid.position);
 
       if (gltf.animations && gltf.animations.length) {
-        rabbidEventMixer = new THREE.AnimationMixer(rabbidEventModel);
-        rabbidEventAction = rabbidEventMixer.clipAction(gltf.animations[0]);
+        rabbidMixer = new THREE.AnimationMixer(rabbid);
+        rabbidClips = gltf.animations;
+
+        const idleClip = findRabbidClip(/Idle1|Idle2|IdleHold|IdleLook|Idle/i) || rabbidClips[0];
+        const eventClip = rabbidClips[0] === idleClip
+          ? (findRabbidClip(/BWAAAAAH|Hello|Laugh|Dance|Jump|Yes|No/i) || rabbidClips[1] || idleClip)
+          : rabbidClips[0];
+
+        rabbidIdleAction = rabbidMixer.clipAction(idleClip);
+        rabbidEventAction = rabbidMixer.clipAction(eventClip);
         rabbidEventAction.setLoop(THREE.LoopOnce, 1);
         rabbidEventAction.clampWhenFinished = false;
-        rabbidEventAction.enabled = true;
-        rabbidEventAction.paused = true;
+        rabbidEventAction.enabled = false;
 
-        rabbidEventMixer.addEventListener("finished", event => {
+        startRabbidIdle();
+        rabbidNextPlayAt = performance.now() + RABBID_PLAY_INTERVAL_MS;
+
+        console.log("[RABBID ORIGINAL GLB READY]", {
+          clips: gltf.animations.length,
+          idleClip: idleClip.name,
+          eventClip: eventClip.name,
+          nextPlayMs: RABBID_PLAY_INTERVAL_MS,
+        });
+
+        rabbidMixer.addEventListener("finished", event => {
           if (event.action !== rabbidEventAction) return;
           rabbidEventAction.stop();
           rabbidEventAction.enabled = false;
           rabbidEventPlaying = false;
-          setRabbidMode("idle");
-        });
-
-        console.log("[RABBID EVENT GLB READY]", {
-          clips: gltf.animations.length,
-          nextPlayMs: RABBID_PLAY_INTERVAL_MS,
+          resetRabbidBodyBreathing();
+          rabbidRoot.scale.setScalar(RABBID_BASE_SCALE);
+          startRabbidIdle();
         });
       } else {
-        console.warn("[RABBID EVENT GLB ANIMATION MISSING]", {
+        console.warn("[RABBID ANIMATION MISSING]", {
           animations: gltf.animations ? gltf.animations.length : 0,
           userAgent: navigator.userAgent,
         });
       }
-    });
-}
-
-function loadRabbid() {
-  addRabbidSoftLight(RABBID_POS);
-  Promise.allSettled([loadRabbidIdle(), loadRabbidEvent()])
-    .then(results => {
-      results.forEach(result => {
-        if (result.status === "rejected") console.error("Rabbid:", result.reason);
-      });
-      if (rabbidIdleModel) {
-        setRabbidMode("idle");
-      } else if (rabbidEventModel) {
-        rabbidEventModel.visible = true;
-      }
-      rabbidNextPlayAt = performance.now() + RABBID_PLAY_INTERVAL_MS;
-    });
+    })
+    .catch(err => console.error("Rabbid:", err));
 }
 
 function addRabbidSoftLight(pos) {
@@ -956,17 +970,19 @@ function animate() {
   rainSystem.update(delta);
 
   _syncAudioLocation(); // position-based inside/outside check
-  const rabbidDelta = Math.min(realDelta, RABBID_MIXER_MAX_STEP);
-  if (rabbidIdleMixer && !rabbidEventPlaying) rabbidIdleMixer.update(rabbidDelta);
-  if (rabbidEventMixer && rabbidEventPlaying) rabbidEventMixer.update(rabbidDelta);
+  if (rabbidMixer) {
+    rabbidMixer.update(Math.min(realDelta, RABBID_MIXER_MAX_STEP));
 
-  const now = performance.now();
-  if (!rabbidNextPlayAt) rabbidNextPlayAt = now + RABBID_PLAY_INTERVAL_MS;
+    const now = performance.now();
+    if (!rabbidNextPlayAt) rabbidNextPlayAt = now + RABBID_PLAY_INTERVAL_MS;
 
-  if (rabbidEventAction && now >= rabbidNextPlayAt && !rabbidEventPlaying) {
-    rabbidNextPlayAt = now + RABBID_PLAY_INTERVAL_MS;
-    playRabbidOnce();
+    if (rabbidEventAction && now >= rabbidNextPlayAt && !rabbidEventPlaying) {
+      rabbidNextPlayAt = now + RABBID_PLAY_INTERVAL_MS;
+      playRabbidOnce();
+    }
   }
+
+  updateRabbidProceduralBreathing();
   composer.render();
 }
 
