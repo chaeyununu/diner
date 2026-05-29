@@ -788,7 +788,9 @@ function addCeilingLightFixtures(root) {
     const isMiddleEntranceFluorescent = dz === 1.4;
     const rainTubeColor = isMiddleEntranceFluorescent ? 0xFF3838 : 0x48C8D8;
     if (mat.emissive) mat.emissive.setHex(rainTubeColor); else mat.emissive = new THREE.Color(rainTubeColor);
-    mat.emissiveIntensity = 5.0;
+    // The remaining entrance-side tube is one of the two visible start-view red tubes.
+    // Make only this tube throw a little more red light into the room.
+    mat.emissiveIntensity = isMiddleEntranceFluorescent ? 8.4 : 5.0;
     mat.needsUpdate = true;
 
     const mesh = new THREE.Mesh(tplMesh.geometry, mat);
@@ -801,10 +803,17 @@ function addCeilingLightFixtures(root) {
     _ceilGlowMeshes.push(mesh);
 
     // PointLight for actual illumination — rain only, sunny=0
-    const pt = new THREE.PointLight(rainTubeColor, 0, 7.5);
+    const pt = new THREE.PointLight(rainTubeColor, 0, isMiddleEntranceFluorescent ? 10.5 : 7.5);
     pt.position.set(anchorX, placeY - 0.12, anchorZ + dz);
     scene.add(pt);
-    _interiorLights.push({ light: pt, rain: 0.28, sunny: 0 });
+    _interiorLights.push({ light: pt, rain: isMiddleEntranceFluorescent ? 0.58 : 0.28, sunny: 0 });
+
+    if (isMiddleEntranceFluorescent) {
+      const bounce = new THREE.PointLight(0xff5a48, 0, 8.4);
+      bounce.position.set(anchorX, placeY - 0.58, anchorZ + dz + 0.06);
+      scene.add(bounce);
+      _interiorLights.push({ light: bounce, rain: 0.20, sunny: 0 });
+    }
   });
 
   // Table-set red tubes: one rain-only tube for each armchair + tabletop + armchair set.
@@ -925,8 +934,8 @@ function addCeilingLightFixtures(root) {
   // Start-view tube: keep only the adjusted entrance-side tube.
   // The lower circled tube at x 0.08 / z 0.50 is intentionally removed below.
   const startViewTubeCenters = [
-    // Newly added tube only: moved slightly toward the ENTRANCE start side and strongly toward the removed circled tube side.
-    { x: -0.30, z: 1.13, startViewGlow: true },
+    // Newly added tube only: moved a hair back from the ENTRANCE start side and strongly toward the removed circled tube side.
+    { x: -0.30, z: 1.11, startViewGlow: true },
   ];
 
   startViewTubeCenters.forEach(target => {
@@ -946,7 +955,7 @@ function addCeilingLightFixtures(root) {
   for (let i = tableCenters.length - 1; i >= 0; i--) {
     const c = tableCenters[i];
     const isCircledStartTube = Math.abs(c.x - 0.08) < 0.22 && Math.abs(c.z - 0.50) < 0.28;
-    const isMovedAddedTube = Math.abs(c.x + 0.18) < 0.18 && Math.abs(c.z - 1.08) < 0.20;
+    const isMovedAddedTube = Math.abs(c.x + 0.30) < 0.18 && Math.abs(c.z - 1.11) < 0.20;
     const isRabbidBackSideNeighbor = Math.abs(c.x - 0.08) < 0.65 && c.z < 0.10 && c.z > -1.35;
     if (!isMovedAddedTube && (isCircledStartTube || isRabbidBackSideNeighbor)) {
       tableCenters.splice(i, 1);
@@ -954,7 +963,7 @@ function addCeilingLightFixtures(root) {
   }
 
   tableCenters.forEach(c => {
-    const isAddedStartTube = Math.abs(c.x + 0.18) < 0.18 && Math.abs(c.z - 1.08) < 0.20;
+    const isAddedStartTube = Math.abs(c.x + 0.30) < 0.18 && Math.abs(c.z - 1.11) < 0.20;
     if (isAddedStartTube) {
       c.startViewGlow = true;
     }
@@ -966,7 +975,7 @@ function addCeilingLightFixtures(root) {
     const mat = baseMat.clone();
     if (mat.emissive) mat.emissive.setHex(tableTubeColor);
     else mat.emissive = new THREE.Color(tableTubeColor);
-    mat.emissiveIntensity = startViewGlow ? 7.2 : 5.0;
+    mat.emissiveIntensity = startViewGlow ? 8.4 : 5.0;
     mat.needsUpdate = true;
 
     const mesh = new THREE.Mesh(tplMesh.geometry, mat);
@@ -988,18 +997,25 @@ function addCeilingLightFixtures(root) {
     scene.add(mesh);
     _ceilGlowMeshes.push(mesh);
 
-    const pt = new THREE.PointLight(tableTubeColor, 0, startViewGlow ? 9.2 : 4.8);
+    const pt = new THREE.PointLight(tableTubeColor, 0, startViewGlow ? 10.5 : 4.8);
     pt.position.set(x, tableTubeY - 0.12, z);
     scene.add(pt);
-    _interiorLights.push({ light: pt, rain: startViewGlow ? 0.46 : 0.22, sunny: 0 });
+    _interiorLights.push({ light: pt, rain: startViewGlow ? 0.58 : 0.22, sunny: 0 });
 
     if (startViewGlow) {
-      const bounce = new THREE.PointLight(0xff5a48, 0, 7.2);
+      const bounce = new THREE.PointLight(0xff5a48, 0, 8.4);
       bounce.position.set(x, tableTubeY - 0.62, z + 0.10);
       scene.add(bounce);
-      _interiorLights.push({ light: bounce, rain: 0.14, sunny: 0 });
+      _interiorLights.push({ light: bounce, rain: 0.20, sunny: 0 });
     }
   });
+
+  // Very subtle red spill toward the Rabbid face, caused by the two start-view tubes.
+  // Rain-only, so sunny mode stays unchanged.
+  const rabbidFaceRedSpill = new THREE.PointLight(0xff4a3a, 0, 2.7);
+  rabbidFaceRedSpill.position.set(0.33, 0.18, 0.62);
+  scene.add(rabbidFaceRedSpill);
+  _interiorLights.push({ light: rabbidFaceRedSpill, rain: 0.13, sunny: 0 });
 
 }
 
