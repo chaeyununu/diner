@@ -926,7 +926,7 @@ function addCeilingLightFixtures(root) {
   // The lower circled tube at x 0.08 / z 0.50 is intentionally removed below.
   const startViewTubeCenters = [
     // Newly added tube only: moved slightly toward the ENTRANCE start side and strongly toward the removed circled tube side.
-    { x: -0.18, z: 1.08, startViewGlow: true },
+    { x: -0.30, z: 1.13, startViewGlow: true },
   ];
 
   startViewTubeCenters.forEach(target => {
@@ -981,7 +981,7 @@ function addCeilingLightFixtures(root) {
       const longAxis = tubeSize.x >= tubeSize.y && tubeSize.x >= tubeSize.z
         ? "x"
         : (tubeSize.y >= tubeSize.z ? "y" : "z");
-      mesh.scale[longAxis] *= 1.28;
+      mesh.scale[longAxis] *= 1.42;
     }
     mesh.frustumCulled = false;
     mesh.visible = weatherMode === "rain";
