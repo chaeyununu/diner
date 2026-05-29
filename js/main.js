@@ -794,9 +794,22 @@ function addCeilingLightFixtures(root) {
     mat.needsUpdate = true;
 
     const mesh = new THREE.Mesh(tplMesh.geometry, mat);
-    mesh.position.set(anchorX, placeY, anchorZ + dz);
+    // Move only the adjacent entrance-side tube away from the recently adjusted start-view tube.
+    const entranceNeighborOffsetX = isMiddleEntranceFluorescent ? 0.22 : 0;
+    const entranceNeighborOffsetZ = isMiddleEntranceFluorescent ? -0.04 : 0;
+    mesh.position.set(anchorX + entranceNeighborOffsetX, placeY, anchorZ + dz + entranceNeighborOffsetZ);
     mesh.quaternion.copy(wQuat);
     mesh.scale.copy(wScale);
+    if (isMiddleEntranceFluorescent) {
+      const geom = tplMesh.geometry;
+      if (!geom.boundingBox) geom.computeBoundingBox();
+      const tubeSize = new THREE.Vector3();
+      geom.boundingBox.getSize(tubeSize);
+      const longAxis = tubeSize.x >= tubeSize.y && tubeSize.x >= tubeSize.z
+        ? "x"
+        : (tubeSize.y >= tubeSize.z ? "y" : "z");
+      mesh.scale[longAxis] *= 1.32;
+    }
     mesh.frustumCulled = false;
     mesh.visible = false;
     scene.add(mesh);
@@ -804,13 +817,13 @@ function addCeilingLightFixtures(root) {
 
     // PointLight for actual illumination — rain only, sunny=0
     const pt = new THREE.PointLight(rainTubeColor, 0, isMiddleEntranceFluorescent ? 10.5 : 7.5);
-    pt.position.set(anchorX, placeY - 0.12, anchorZ + dz);
+    pt.position.set(anchorX + entranceNeighborOffsetX, placeY - 0.12, anchorZ + dz + entranceNeighborOffsetZ);
     scene.add(pt);
     _interiorLights.push({ light: pt, rain: isMiddleEntranceFluorescent ? 0.58 : 0.28, sunny: 0 });
 
     if (isMiddleEntranceFluorescent) {
       const bounce = new THREE.PointLight(0xff5a48, 0, 8.4);
-      bounce.position.set(anchorX, placeY - 0.58, anchorZ + dz + 0.06);
+      bounce.position.set(anchorX + entranceNeighborOffsetX, placeY - 0.58, anchorZ + dz + entranceNeighborOffsetZ + 0.06);
       scene.add(bounce);
       _interiorLights.push({ light: bounce, rain: 0.20, sunny: 0 });
     }
