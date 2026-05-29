@@ -14,7 +14,7 @@ const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
 // ?? Route presets ?????????????????????????????????????????????????
 // frontEntry: approach from diner entrance ??walk in ??turn left ??booth tour
 const FRONT_ENTRY = [
-  { id: "OUT1", x:  1.58, y: -0.7071, z: 12.80, yaw:  0.01,  pitch:  0.00, fov: 59 },
+  { id: "OUT1", x:  1.58, y: -0.7071, z: 16.20, yaw:  0.01,  pitch:  0.00, fov: 59 },
   { id: "OUT2", x:  1.58, y: -0.7071, z:  6.40, yaw:  0.01,  pitch:  0.00, fov: 58 },
   { id: "OUT3", x:  1.54, y: -0.7071, z:  3.85, yaw:  0.03,  pitch:  0.01, fov: 57 },
   { id: "IN1",   x: 1.52, y: -0.7071, z:  1.72, yaw:  0.02,  pitch:  0.02, fov: 56 },
