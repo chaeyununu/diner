@@ -774,7 +774,8 @@ function addCeilingLightFixtures(root) {
   tplMesh.updateWorldMatrix(true, false);
   const wQuat = new THREE.Quaternion();
   const wScale = new THREE.Vector3();
-  tplMesh.matrixWorld.decompose(new THREE.Vector3(), wQuat, wScale);
+  const tplWorldPos = new THREE.Vector3();
+  tplMesh.matrixWorld.decompose(tplWorldPos, wQuat, wScale);
 
   const baseMat = (Array.isArray(tplMesh.material) ? tplMesh.material[0] : tplMesh.material);
   const placeY  = ceilingBottomY - 0.005;
@@ -807,17 +808,14 @@ function addCeilingLightFixtures(root) {
   });
 
   // Table-set red tubes: one rain-only tube for each armchair + tabletop + armchair set.
-  // Important placement rule:
-  // Do NOT use each table's X position. That makes the cloned fixture float in odd places.
-  // Instead, copy the original trash-area fluorescent line:
-  // - same template geometry
-  // - same quaternion / scale
-  // - same low-ceiling Y
-  // - same ceiling-line X (anchorX)
-  // Only Z changes per tabletop set.
+  // Placement rule:
+  // Copy the REAL existing trash-side fluorescent fixture's X/Y/rotation/scale.
+  // Do not use the wall seam, the table X, or the high ceiling plane.
+  // Only Z changes per tabletop set, so each new tube sits flat on the same lower soffit
+  // surface as the original trash-side fixture.
   const tableTubeColor = 0xFF3838;
-  const tableTubeY = placeY;
-  const tableTubeX = anchorX;
+  const tableTubeX = tplWorldPos.x;
+  const tableTubeY = tplWorldPos.y;
 
   function _meshCenterAndSize(obj) {
     const box = new THREE.Box3().setFromObject(obj);
