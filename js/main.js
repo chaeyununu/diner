@@ -806,15 +806,18 @@ function addCeilingLightFixtures(root) {
     _interiorLights.push({ light: pt, rain: 0.28, sunny: 0 });
   });
 
-  // Table-set red tubes: one rain-only tube above each armchair + tabletop + armchair set.
-  // Placement deliberately follows the original Lights / Lights_01 fixture style:
+  // Table-set red tubes: one rain-only tube for each armchair + tabletop + armchair set.
+  // Important placement rule:
+  // Do NOT use each table's X position. That makes the cloned fixture float in odd places.
+  // Instead, copy the original trash-area fluorescent line:
   // - same template geometry
-  // - same world rotation
-  // - same scale
-  // - mounted directly to the same lower ceiling underside as the existing fixture
-  // - no arbitrary window-wall X position and no extra rotateY, so it does not float oddly
+  // - same quaternion / scale
+  // - same low-ceiling Y
+  // - same ceiling-line X (anchorX)
+  // Only Z changes per tabletop set.
   const tableTubeColor = 0xFF3838;
   const tableTubeY = placeY;
+  const tableTubeX = anchorX;
 
   function _meshCenterAndSize(obj) {
     const box = new THREE.Box3().setFromObject(obj);
@@ -825,7 +828,7 @@ function addCeilingLightFixtures(root) {
     return { center, size };
   }
 
-  function getTableSetCenters() {
+  function getTableSetZPositions() {
     const tables = [];
     const armchairs = [];
 
@@ -836,73 +839,66 @@ function addCeilingLightFixtures(root) {
       const n = ((obj.name || '') + ' ' + matName).toLowerCase();
       const { center, size } = _meshCenterAndSize(obj);
 
-      const isArmchair = /armchair/.test(n);
-      if (isArmchair && center.y > 0.15 && center.y < 1.35 && center.z > -4.8 && center.z < 1.0) {
+      if (/armchair/.test(n) && center.y > 0.05 && center.y < 1.45 && center.z > -5.2 && center.z < 1.4) {
         armchairs.push(center.clone());
         return;
       }
 
-      const isTable = /tabletop|table|diner_top/.test(n)
-        && !/counter|bar|floor|wall|ceil|sign|menu|logo|light|lamp|window|glass/.test(n);
-      if (!isTable) return;
-      if (center.y < 0.25 || center.y > 1.25) return;
-      if (center.z < -4.8 || center.z > 1.0) return;
-      if (size.x < 0.20 && size.z < 0.20) return;
+      // Keep this strict. Generic /table/ caught wrong interior pieces before.
+      const isRealTabletop = /tabletop|diner_top/.test(n)
+        && !/counter|bar|floor|wall|ceil|sign|menu|logo|light|lamp|window|glass|condiment|plate|food|trash/.test(n);
+      if (!isRealTabletop) return;
+      if (center.y < 0.25 || center.y > 1.20) return;
+      if (center.z < -5.2 || center.z > 1.4) return;
+      if (size.x < 0.35 && size.z < 0.35) return;
       tables.push(center.clone());
     });
 
-    tables.sort((a, b) => (a.z - b.z) || (a.x - b.x));
-
-    // Merge pieces that belong to the same tabletop/set.
-    const groups = [];
+    // Merge tabletop pieces into one Z per table set.
+    tables.sort((a, b) => a.z - b.z);
+    const grouped = [];
     tables.forEach(c => {
-      let g = groups.find(item => Math.abs(item.x - c.x) < 0.65 && Math.abs(item.z - c.z) < 0.55);
+      const g = grouped.find(item => Math.abs(item.z - c.z) < 0.58);
       if (!g) {
-        groups.push({ x: c.x, z: c.z, count: 1 });
+        grouped.push({ z: c.z, x: c.x, count: 1 });
       } else {
-        g.x = (g.x * g.count + c.x) / (g.count + 1);
         g.z = (g.z * g.count + c.z) / (g.count + 1);
+        g.x = (g.x * g.count + c.x) / (g.count + 1);
         g.count += 1;
       }
     });
 
-    let centers = groups.map(g => ({ x: g.x, z: g.z }));
+    let centers = grouped;
 
-    // Prefer true armchair + table + armchair sets when armchairs are detectable.
+    // Prefer true armchair + tabletop + armchair sets when armchair meshes are detectable.
+    // We use this only as a filter; final fixture X is still the original ceiling-line X.
     if (armchairs.length >= 2) {
-      const paired = centers.filter(c => {
-        const near = armchairs.filter(a => Math.abs(a.z - c.z) < 0.95 && Math.abs(a.x - c.x) < 2.4);
-        const hasLeft = near.some(a => a.x < c.x - 0.25);
-        const hasRight = near.some(a => a.x > c.x + 0.25);
-        return near.length >= 2 && (hasLeft || hasRight);
+      const paired = grouped.filter(c => {
+        const near = armchairs.filter(a => Math.abs(a.z - c.z) < 0.95 && Math.abs(a.x - c.x) < 2.8);
+        const hasSideA = near.some(a => a.x < c.x - 0.20);
+        const hasSideB = near.some(a => a.x > c.x + 0.20);
+        return near.length >= 2 && (hasSideA || hasSideB);
       });
       if (paired.length) centers = paired;
     }
 
-    centers.sort((a, b) => a.z - b.z);
-
-    // Dedupe by Z so each 2-chair + 1-table set gets one tube.
+    // Dedupe by Z. No fallback positions: if a table set is not detected,
+    // do not add random floating fixtures.
     const deduped = [];
-    centers.forEach(c => {
-      const last = deduped[deduped.length - 1];
-      if (!last || Math.abs(last.z - c.z) > 0.62) {
-        deduped.push({ ...c });
-      } else {
-        last.x = (last.x + c.x) * 0.5;
-        last.z = (last.z + c.z) * 0.5;
-      }
-    });
+    centers
+      .map(c => c.z)
+      .sort((a, b) => a - b)
+      .forEach(z => {
+        const last = deduped[deduped.length - 1];
+        if (last === undefined || Math.abs(last - z) > 0.70) {
+          deduped.push(z);
+        }
+      });
 
-    // Fallback: use the same ceiling line as the original fixture, not the window wall.
-    // This avoids the previous floating/window-offset look if table names are not exposed.
-    return deduped.length >= 2 ? deduped : [
-      { x: anchorX, z: anchorZ - 0.2 },
-      { x: anchorX, z: anchorZ - 1.4 },
-      { x: anchorX, z: anchorZ - 2.6 },
-    ];
+    return deduped;
   }
 
-  getTableSetCenters().forEach(({ x, z }) => {
+  getTableSetZPositions().forEach(z => {
     const mat = baseMat.clone();
     if (mat.emissive) mat.emissive.setHex(tableTubeColor);
     else mat.emissive = new THREE.Color(tableTubeColor);
@@ -910,7 +906,7 @@ function addCeilingLightFixtures(root) {
     mat.needsUpdate = true;
 
     const mesh = new THREE.Mesh(tplMesh.geometry, mat);
-    mesh.position.set(x, tableTubeY, z);
+    mesh.position.set(tableTubeX, tableTubeY, z);
     mesh.quaternion.copy(wQuat);
     mesh.scale.copy(wScale);
     mesh.frustumCulled = false;
@@ -919,7 +915,7 @@ function addCeilingLightFixtures(root) {
     _ceilGlowMeshes.push(mesh);
 
     const pt = new THREE.PointLight(tableTubeColor, 0, 4.8);
-    pt.position.set(x, tableTubeY - 0.12, z);
+    pt.position.set(tableTubeX, tableTubeY - 0.12, z);
     scene.add(pt);
     _interiorLights.push({ light: pt, rain: 0.22, sunny: 0 });
   });
