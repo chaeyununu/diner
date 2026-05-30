@@ -959,8 +959,11 @@ function addCeilingLightFixtures(root) {
     const c = tableCenters[i];
     const isCircledStartTube = Math.abs(c.x - 0.08) < 0.22 && Math.abs(c.z - 0.50) < 0.28;
     const isMovedAddedTube = Math.abs(c.x + 0.30) < 0.18 && Math.abs(c.z - 1.13) < 0.20;
+    // This is the added table tube the user meant: Rabbid's own left-front fixture.
+    // Do not delete it while removing the unwanted neighbor/start-view tube.
+    const isActualRabbidLeftFrontTube = Math.abs(c.x - 0.08) < 0.42 && Math.abs(c.z + 0.72) < 0.34;
     const isRabbidBackSideNeighbor = Math.abs(c.x - 0.08) < 0.65 && c.z < 0.10 && c.z > -1.35;
-    if (!isMovedAddedTube && (isCircledStartTube || isRabbidBackSideNeighbor)) {
+    if (!isMovedAddedTube && !isActualRabbidLeftFrontTube && (isCircledStartTube || isRabbidBackSideNeighbor)) {
       tableCenters.splice(i, 1);
     }
   }
@@ -973,15 +976,15 @@ function addCeilingLightFixtures(root) {
   });
 
   console.log('[TABLE FLUORESCENTS]', tableCenters.length, tableCenters);
+  console.log('[RABBID LEFT-FRONT TUBE TARGET]', tableCenters.find(c => Math.abs(c.x - 0.08) < 0.42 && Math.abs(c.z + 0.72) < 0.34) || null);
 
   tableCenters.forEach(({ x, z, startViewGlow = false }) => {
-    // Target: Rabbid's own left-front table fluorescent.
-    // Do NOT lengthen the one directly to the Rabbid's left.
-    // The left-front fixture is the next table-set tube farther forward from Rabbid,
-    // around the same x line but deeper inside the diner.
+    // Target: the added table fluorescent the user meant.
+    // Based on the previous target identification, it is the Rabbid-left-front tube
+    // on the added table-light line, around x 0.08 / z -0.72.
     const isRabbidLeftFrontTube = !startViewGlow
       && Math.abs(x - 0.08) < 0.42
-      && Math.abs(z + 3.16) < 0.52;
+      && Math.abs(z + 0.72) < 0.34;
 
     const mat = baseMat.clone();
     if (mat.emissive) mat.emissive.setHex(tableTubeColor);
@@ -1001,7 +1004,7 @@ function addCeilingLightFixtures(root) {
       const longAxis = tubeSize.x >= tubeSize.y && tubeSize.x >= tubeSize.z
         ? "x"
         : (tubeSize.y >= tubeSize.z ? "y" : "z");
-      mesh.scale[longAxis] *= isRabbidLeftFrontTube ? 4.10 : 1.42;
+      mesh.scale[longAxis] *= isRabbidLeftFrontTube ? 5.80 : 1.42;
     }
     mesh.frustumCulled = false;
     mesh.visible = weatherMode === "rain";
