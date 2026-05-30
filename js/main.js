@@ -997,7 +997,7 @@ function addCeilingLightFixtures(root) {
       const longAxis = tubeSize.x >= tubeSize.y && tubeSize.x >= tubeSize.z
         ? "x"
         : (tubeSize.y >= tubeSize.z ? "y" : "z");
-      mesh.scale[longAxis] *= isRearSameLineTube ? 2.10 : 1.42;
+      mesh.scale[longAxis] *= isRearSameLineTube ? 3.40 : 1.42;
     }
     mesh.frustumCulled = false;
     mesh.visible = weatherMode === "rain";
