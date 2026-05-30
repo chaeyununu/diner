@@ -794,24 +794,12 @@ function addCeilingLightFixtures(root) {
     mat.needsUpdate = true;
 
     const mesh = new THREE.Mesh(tplMesh.geometry, mat);
-    // Target requested now: the adjacent entrance-view left-side tube, not the rear table tube.
-    // Move this one strongly toward screen/right (+X).
-    const entranceNeighborOffsetX = isMiddleEntranceFluorescent ? 1.05 : 0;
-    const entranceNeighborOffsetZ = isMiddleEntranceFluorescent ? -0.04 : 0;
+    // Restore the entrance-side ceiling tube to the original fixture position/normal length.
+    const entranceNeighborOffsetX = 0;
+    const entranceNeighborOffsetZ = 0;
     mesh.position.set(anchorX + entranceNeighborOffsetX, placeY, anchorZ + dz + entranceNeighborOffsetZ);
     mesh.quaternion.copy(wQuat);
     mesh.scale.copy(wScale);
-    if (isMiddleEntranceFluorescent) {
-      const geom = tplMesh.geometry;
-      if (!geom.boundingBox) geom.computeBoundingBox();
-      const tubeSize = new THREE.Vector3();
-      geom.boundingBox.getSize(tubeSize);
-      const longAxis = tubeSize.x >= tubeSize.y && tubeSize.x >= tubeSize.z
-        ? "x"
-        : (tubeSize.y >= tubeSize.z ? "y" : "z");
-      // Target requested now: make this adjacent entrance-side tube very long.
-      mesh.scale[longAxis] *= 4.60;
-    }
     mesh.frustumCulled = false;
     mesh.visible = false;
     scene.add(mesh);
@@ -987,9 +975,9 @@ function addCeilingLightFixtures(root) {
   console.log('[TABLE FLUORESCENTS]', tableCenters.length, tableCenters);
 
   tableCenters.forEach(({ x, z, startViewGlow = false }) => {
-    // REAR view circled tube: the red table-set fluorescent visible on the rear side.
-    // Lengthen this specific cloned fixture, not the neighboring entrance-side ceiling tube.
-    const isRearViewCircledTube = Math.abs(x - 0.08) < 0.42 && Math.abs(z + 1.94) < 0.48;
+    // Target now: not the entrance-view left ceiling tube.
+    // Lengthen the table-set fluorescent that sits on the same rear-side line as the previously circled tube.
+    const isRearSameLineTube = !startViewGlow && Math.abs(z + 1.94) < 0.48;
 
     const mat = baseMat.clone();
     if (mat.emissive) mat.emissive.setHex(tableTubeColor);
@@ -1001,7 +989,7 @@ function addCeilingLightFixtures(root) {
     mesh.position.set(x, tableTubeY, z);
     mesh.quaternion.copy(wQuat);
     mesh.scale.copy(wScale);
-    if (startViewGlow) {
+    if (startViewGlow || isRearSameLineTube) {
       const geom = tplMesh.geometry;
       if (!geom.boundingBox) geom.computeBoundingBox();
       const tubeSize = new THREE.Vector3();
@@ -1009,7 +997,7 @@ function addCeilingLightFixtures(root) {
       const longAxis = tubeSize.x >= tubeSize.y && tubeSize.x >= tubeSize.z
         ? "x"
         : (tubeSize.y >= tubeSize.z ? "y" : "z");
-      mesh.scale[longAxis] *= 1.42;
+      mesh.scale[longAxis] *= isRearSameLineTube ? 2.10 : 1.42;
     }
     mesh.frustumCulled = false;
     mesh.visible = weatherMode === "rain";
