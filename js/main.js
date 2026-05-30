@@ -1000,6 +1000,7 @@ function addCeilingLightFixtures(root) {
     mesh.position.set(x, tableTubeY, z);
     mesh.quaternion.copy(wQuat);
     mesh.scale.copy(wScale);
+    let rearTubeLightOffsetX = 0;
     if (startViewGlow || isRearViewCircledTube) {
       const geom = tplMesh.geometry;
       if (!geom.boundingBox) geom.computeBoundingBox();
@@ -1008,7 +1009,15 @@ function addCeilingLightFixtures(root) {
       const longAxis = tubeSize.x >= tubeSize.y && tubeSize.x >= tubeSize.z
         ? "x"
         : (tubeSize.y >= tubeSize.z ? "y" : "z");
-      mesh.scale[longAxis] *= isRearViewCircledTube ? 2.35 : 1.42;
+      if (isRearViewCircledTube) {
+        // REAR-view circled fluorescent only:
+        // extend it much more toward the arrow direction (screen-right / +X).
+        mesh.scale[longAxis] *= 3.40;
+        mesh.position.x += 0.58;
+        rearTubeLightOffsetX = 0.38;
+      } else {
+        mesh.scale[longAxis] *= 1.42;
+      }
     }
     mesh.frustumCulled = false;
     mesh.visible = weatherMode === "rain";
@@ -1016,7 +1025,7 @@ function addCeilingLightFixtures(root) {
     _ceilGlowMeshes.push(mesh);
 
     const pt = new THREE.PointLight(tableTubeColor, 0, startViewGlow ? 10.5 : 4.8);
-    pt.position.set(x, tableTubeY - 0.12, z);
+    pt.position.set(x + rearTubeLightOffsetX, tableTubeY - 0.12, z);
     scene.add(pt);
     _interiorLights.push({ light: pt, rain: startViewGlow ? 0.58 : 0.22, sunny: 0 });
 
