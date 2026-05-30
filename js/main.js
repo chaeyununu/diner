@@ -6,7 +6,7 @@ import { createCityBackdrop, setupBloom, setGroundWet, createFrontBackdrop, setW
 import { createExteriorRain } from "./rain-effect.js";
 import { initAudio } from "./audio.js";
 
-const VERSION = "20260530033500";
+const VERSION = "20260529162500";
 const STT_DINER_PATH = "./assets/models/sttdiner.glb?v=" + VERSION;
 const DINER_PATH  = "./assets/models/diners.glb?v=" + VERSION;
 const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
@@ -774,8 +774,7 @@ function addCeilingLightFixtures(root) {
   tplMesh.updateWorldMatrix(true, false);
   const wQuat = new THREE.Quaternion();
   const wScale = new THREE.Vector3();
-  const tplWorldPos = new THREE.Vector3();
-  tplMesh.matrixWorld.decompose(tplWorldPos, wQuat, wScale);
+  tplMesh.matrixWorld.decompose(new THREE.Vector3(), wQuat, wScale);
 
   const baseMat = (Array.isArray(tplMesh.material) ? tplMesh.material[0] : tplMesh.material);
   const placeY  = ceilingBottomY - 0.005;
@@ -788,16 +787,11 @@ function addCeilingLightFixtures(root) {
     const isMiddleEntranceFluorescent = dz === 1.4;
     const rainTubeColor = isMiddleEntranceFluorescent ? 0xFF3838 : 0x48C8D8;
     if (mat.emissive) mat.emissive.setHex(rainTubeColor); else mat.emissive = new THREE.Color(rainTubeColor);
-    // The remaining entrance-side tube is one of the two visible start-view red tubes.
-    // Make only this tube throw a little more red light into the room.
-    mat.emissiveIntensity = isMiddleEntranceFluorescent ? 8.4 : 5.0;
+    mat.emissiveIntensity = 5.0;
     mat.needsUpdate = true;
 
     const mesh = new THREE.Mesh(tplMesh.geometry, mat);
-    // Restore the entrance-side ceiling tube to the original fixture position/normal length.
-    const entranceNeighborOffsetX = 0;
-    const entranceNeighborOffsetZ = 0;
-    mesh.position.set(anchorX + entranceNeighborOffsetX, placeY, anchorZ + dz + entranceNeighborOffsetZ);
+    mesh.position.set(anchorX, placeY, anchorZ + dz);
     mesh.quaternion.copy(wQuat);
     mesh.scale.copy(wScale);
     mesh.frustumCulled = false;
@@ -806,229 +800,11 @@ function addCeilingLightFixtures(root) {
     _ceilGlowMeshes.push(mesh);
 
     // PointLight for actual illumination — rain only, sunny=0
-    const pt = new THREE.PointLight(rainTubeColor, 0, isMiddleEntranceFluorescent ? 10.5 : 7.5);
-    pt.position.set(anchorX + entranceNeighborOffsetX, placeY - 0.12, anchorZ + dz + entranceNeighborOffsetZ);
+    const pt = new THREE.PointLight(rainTubeColor, 0, 7.5);
+    pt.position.set(anchorX, placeY - 0.12, anchorZ + dz);
     scene.add(pt);
-    _interiorLights.push({ light: pt, rain: isMiddleEntranceFluorescent ? 0.58 : 0.28, sunny: 0 });
-
-    if (isMiddleEntranceFluorescent) {
-      const bounce = new THREE.PointLight(0xff5a48, 0, 8.4);
-      bounce.position.set(anchorX + entranceNeighborOffsetX, placeY - 0.58, anchorZ + dz + entranceNeighborOffsetZ + 0.06);
-      scene.add(bounce);
-      _interiorLights.push({ light: bounce, rain: 0.20, sunny: 0 });
-    }
+    _interiorLights.push({ light: pt, rain: 0.28, sunny: 0 });
   });
-
-  // Table-set red tubes: one rain-only tube for each armchair + tabletop + armchair set.
-  // IMPORTANT:
-  // - No extra GLB is loaded. This clones the original Lights / Lights_01 mesh.
-  // - Height / flat ceiling attachment comes from the original fluorescent fixture.
-  // - X/Z placement comes from each table set center.
-  // - If mesh names are not exposed by the GLB, use a conservative diner-layout fallback
-  //   so the lights are still visible instead of silently creating nothing.
-  const tableTubeColor = 0xFF3838;
-  const tableTubeY = placeY;
-
-  function _meshCenterAndSize(obj) {
-    const box = new THREE.Box3().setFromObject(obj);
-    const size = new THREE.Vector3();
-    const center = new THREE.Vector3();
-    box.getSize(size);
-    box.getCenter(center);
-    return { center, size };
-  }
-
-  function _isUsableInteriorPoint(center) {
-    return center.y > 0.05 && center.y < 1.55 && center.z > -5.6 && center.z < 1.8;
-  }
-
-  function getTableSetCenters() {
-    const tableLike = [];
-    const seatLike = [];
-
-    root.traverse(obj => {
-      if (!obj.isMesh) return;
-      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-      const matName = mats.map(m => m?.name || '').join(' ');
-      const n = ((obj.name || '') + ' ' + matName).toLowerCase();
-      const { center, size } = _meshCenterAndSize(obj);
-      if (!_isUsableInteriorPoint(center)) return;
-
-      const bad = /wall|ceil|ceiling|floor|tile|window|glass|door|sign|menu|logo|neon|light|lights|lamp|trash|plate|food|condiment|metal|chrome|frame|trim|railing/i.test(n);
-
-      const namedTable = /tabletop|table_top|diner_top|table|tbl/i.test(n) && !bad;
-      const flatTableShape = !bad
-        && center.y > 0.28 && center.y < 1.15
-        && size.y < 0.30
-        && ((size.x > 0.55 && size.z > 0.20) || (size.z > 0.55 && size.x > 0.20));
-
-      if (namedTable || flatTableShape) {
-        tableLike.push(center.clone());
-        return;
-      }
-
-      const namedSeat = /armchair|booth|seat|chair/i.test(n) && !/stool|bar/i.test(n);
-      const boothShape = !bad
-        && center.y > 0.18 && center.y < 1.35
-        && size.y > 0.35
-        && (size.x > 0.35 || size.z > 0.35);
-
-      if (namedSeat || boothShape) {
-        seatLike.push(center.clone());
-      }
-    });
-
-    function groupCenters(points, zxOnly = false) {
-      const groups = [];
-      points
-        .sort((a, b) => a.z - b.z || a.x - b.x)
-        .forEach(p => {
-          const g = groups.find(item => {
-            const zClose = Math.abs(item.z - p.z) < 0.68;
-            const xClose = zxOnly ? true : Math.abs(item.x - p.x) < 1.35;
-            return zClose && xClose;
-          });
-          if (!g) {
-            groups.push({ x: p.x, z: p.z, count: 1 });
-          } else {
-            g.x = (g.x * g.count + p.x) / (g.count + 1);
-            g.z = (g.z * g.count + p.z) / (g.count + 1);
-            g.count += 1;
-          }
-        });
-      return groups.map(g => ({ x: g.x, z: g.z, count: g.count }));
-    }
-
-    let centers = groupCenters(tableLike, false).map(g => ({ x: g.x, z: g.z }));
-
-    // If table names are hidden, infer each set from armchair/booth pairs.
-    // This gives the midpoint above armchair + tabletop + armchair.
-    if (centers.length < 2 && seatLike.length >= 2) {
-      centers = groupCenters(seatLike, true)
-        .filter(g => g.count >= 2)
-        .map(g => ({ x: g.x, z: g.z }));
-    }
-
-    // Dedupe. Keep one fixture per table set.
-    const deduped = [];
-    centers
-      .sort((a, b) => a.z - b.z || a.x - b.x)
-      .forEach(c => {
-        const exists = deduped.some(d => Math.abs(d.z - c.z) < 0.72 && Math.abs(d.x - c.x) < 1.05);
-        if (!exists) deduped.push({ x: c.x, z: c.z });
-      });
-
-    // The previous version returned [] when the GLB did not expose table names,
-    // so nothing appeared. This fallback is intentional and visible: it uses
-    // the same booth/table line visible in this diner scene, not the wall seam.
-    if (deduped.length === 0) {
-      return [
-        { x: 0.08, z: -0.72 },
-        { x: 0.08, z: -1.94 },
-        { x: 0.08, z: -3.16 },
-      ];
-    }
-
-    return deduped;
-  }
-
-  const tableCenters = getTableSetCenters();
-
-  // Start-view tube: keep only the adjusted entrance-side tube.
-  // The lower circled tube at x 0.08 / z 0.50 is intentionally removed below.
-  const startViewTubeCenters = [
-    // Newly added tube only: moved a tiny amount toward the ENTRANCE start side and strongly toward the removed circled tube side.
-    { x: -0.30, z: 1.15, startViewGlow: true },
-  ];
-
-  startViewTubeCenters.forEach(target => {
-    const existing = tableCenters.find(c =>
-      Math.abs(c.x - target.x) < 0.16 && Math.abs(c.z - target.z) < 0.16
-    );
-    if (existing) {
-      existing.startViewGlow = true;
-    } else {
-      tableCenters.push(target);
-    }
-  });
-
-  // Remove only the circled lower/near start-view tube.
-  // Do NOT delete the Rabbid-left line tubes here. The fixture the user wants to
-  // lengthen is selected below from that same added table-fluorescent line.
-  for (let i = tableCenters.length - 1; i >= 0; i--) {
-    const c = tableCenters[i];
-    const isCircledStartTube = Math.abs(c.x - 0.08) < 0.22 && Math.abs(c.z - 0.50) < 0.28;
-    const isMovedAddedTube = Math.abs(c.x + 0.30) < 0.18 && Math.abs(c.z - 1.13) < 0.20;
-    if (!isMovedAddedTube && isCircledStartTube) {
-      tableCenters.splice(i, 1);
-    }
-  }
-
-  tableCenters.forEach(c => {
-    const isAddedStartTube = Math.abs(c.x + 0.30) < 0.18 && Math.abs(c.z - 1.13) < 0.20;
-    if (isAddedStartTube) {
-      c.startViewGlow = true;
-    }
-  });
-
-  // Pick the exact added fixture from the current code's table-fluorescent list.
-  // From Rabbid's own view: there is one tube directly on the left line, and the
-  // next one farther forward on that same line is the target to lengthen.
-  const rabbidLeftLineTubes = tableCenters
-    .filter(c => !c.startViewGlow && Math.abs(c.x - 0.08) < 0.80 && c.z < 0.35)
-    .sort((a, b) => b.z - a.z); // closest-to-Rabbid first, then farther forward
-  const rabbidLeftFrontTubeTarget = rabbidLeftLineTubes[1] || rabbidLeftLineTubes[0] || null;
-
-  console.log('[TABLE FLUORESCENTS]', tableCenters.length, tableCenters);
-  console.log('[RABBID LEFT LINE TUBES]', rabbidLeftLineTubes);
-  console.log('[RABBID LEFT-FRONT TARGET]', rabbidLeftFrontTubeTarget);
-
-  tableCenters.forEach(({ x, z, startViewGlow = false }) => {
-    const isRabbidLeftFrontTube = !!rabbidLeftFrontTubeTarget
-      && !startViewGlow
-      && Math.abs(x - rabbidLeftFrontTubeTarget.x) < 0.08
-      && Math.abs(z - rabbidLeftFrontTubeTarget.z) < 0.08;
-
-    const mat = baseMat.clone();
-    if (mat.emissive) mat.emissive.setHex(tableTubeColor);
-    else mat.emissive = new THREE.Color(tableTubeColor);
-    mat.emissiveIntensity = startViewGlow ? 8.4 : 5.0;
-    mat.needsUpdate = true;
-
-    const mesh = new THREE.Mesh(tplMesh.geometry, mat);
-    mesh.position.set(x, tableTubeY, z);
-    mesh.quaternion.copy(wQuat);
-    mesh.scale.copy(wScale);
-    if (startViewGlow || isRabbidLeftFrontTube) {
-      const geom = tplMesh.geometry;
-      if (!geom.boundingBox) geom.computeBoundingBox();
-      const tubeSize = new THREE.Vector3();
-      geom.boundingBox.getSize(tubeSize);
-      const longAxis = tubeSize.x >= tubeSize.y && tubeSize.x >= tubeSize.z
-        ? "x"
-        : (tubeSize.y >= tubeSize.z ? "y" : "z");
-      mesh.scale[longAxis] *= isRabbidLeftFrontTube ? 7.20 : 1.42;
-    }
-    mesh.frustumCulled = false;
-    mesh.visible = weatherMode === "rain";
-    scene.add(mesh);
-    _ceilGlowMeshes.push(mesh);
-
-    const pt = new THREE.PointLight(tableTubeColor, 0, startViewGlow ? 10.5 : 4.8);
-    pt.position.set(x, tableTubeY - 0.12, z);
-    scene.add(pt);
-    _interiorLights.push({ light: pt, rain: startViewGlow ? 0.58 : 0.22, sunny: 0 });
-
-    if (startViewGlow) {
-      const bounce = new THREE.PointLight(0xff5a48, 0, 8.4);
-      bounce.position.set(x, tableTubeY - 0.62, z + 0.10);
-      scene.add(bounce);
-      _interiorLights.push({ light: bounce, rain: 0.20, sunny: 0 });
-    }
-  });
-
-  // Rabbid-face-specific red spill removed. The start-view tube lights remain rain-only.
-
 }
 
 function addFixtureLights(root) {
