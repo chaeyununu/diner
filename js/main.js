@@ -975,9 +975,13 @@ function addCeilingLightFixtures(root) {
   console.log('[TABLE FLUORESCENTS]', tableCenters.length, tableCenters);
 
   tableCenters.forEach(({ x, z, startViewGlow = false }) => {
-    // Target now: not the entrance-view left ceiling tube.
-    // Lengthen the table-set fluorescent that sits on the same rear-side line as the previously circled tube.
-    const isRearSameLineTube = !startViewGlow && Math.abs(z + 1.94) < 0.48;
+    // Target: Rabbid's own left-front table fluorescent.
+    // Do NOT lengthen the one directly to the Rabbid's left.
+    // The left-front fixture is the next table-set tube farther forward from Rabbid,
+    // around the same x line but deeper inside the diner.
+    const isRabbidLeftFrontTube = !startViewGlow
+      && Math.abs(x - 0.08) < 0.42
+      && Math.abs(z + 3.16) < 0.52;
 
     const mat = baseMat.clone();
     if (mat.emissive) mat.emissive.setHex(tableTubeColor);
@@ -989,7 +993,7 @@ function addCeilingLightFixtures(root) {
     mesh.position.set(x, tableTubeY, z);
     mesh.quaternion.copy(wQuat);
     mesh.scale.copy(wScale);
-    if (startViewGlow || isRearSameLineTube) {
+    if (startViewGlow || isRabbidLeftFrontTube) {
       const geom = tplMesh.geometry;
       if (!geom.boundingBox) geom.computeBoundingBox();
       const tubeSize = new THREE.Vector3();
@@ -997,7 +1001,7 @@ function addCeilingLightFixtures(root) {
       const longAxis = tubeSize.x >= tubeSize.y && tubeSize.x >= tubeSize.z
         ? "x"
         : (tubeSize.y >= tubeSize.z ? "y" : "z");
-      mesh.scale[longAxis] *= isRearSameLineTube ? 3.40 : 1.42;
+      mesh.scale[longAxis] *= isRabbidLeftFrontTube ? 4.10 : 1.42;
     }
     mesh.frustumCulled = false;
     mesh.visible = weatherMode === "rain";
