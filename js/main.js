@@ -952,18 +952,14 @@ function addCeilingLightFixtures(root) {
     }
   });
 
-  // Remove the circled lower/near start-view tube.
-  // It used to stay because it was protected as the first/original start tube.
-  // Keep only the adjusted added tube near the entrance side.
+  // Remove only the circled lower/near start-view tube.
+  // Do NOT delete the Rabbid-left line tubes here. The fixture the user wants to
+  // lengthen is selected below from that same added table-fluorescent line.
   for (let i = tableCenters.length - 1; i >= 0; i--) {
     const c = tableCenters[i];
     const isCircledStartTube = Math.abs(c.x - 0.08) < 0.22 && Math.abs(c.z - 0.50) < 0.28;
     const isMovedAddedTube = Math.abs(c.x + 0.30) < 0.18 && Math.abs(c.z - 1.13) < 0.20;
-    // This is the added table tube the user meant: Rabbid's own left-front fixture.
-    // Do not delete it while removing the unwanted neighbor/start-view tube.
-    const isActualRabbidLeftFrontTube = Math.abs(c.x - 0.08) < 0.42 && Math.abs(c.z + 0.72) < 0.34;
-    const isRabbidBackSideNeighbor = Math.abs(c.x - 0.08) < 0.65 && c.z < 0.10 && c.z > -1.35;
-    if (!isMovedAddedTube && !isActualRabbidLeftFrontTube && (isCircledStartTube || isRabbidBackSideNeighbor)) {
+    if (!isMovedAddedTube && isCircledStartTube) {
       tableCenters.splice(i, 1);
     }
   }
@@ -975,16 +971,23 @@ function addCeilingLightFixtures(root) {
     }
   });
 
+  // Pick the exact added fixture from the current code's table-fluorescent list.
+  // From Rabbid's own view: there is one tube directly on the left line, and the
+  // next one farther forward on that same line is the target to lengthen.
+  const rabbidLeftLineTubes = tableCenters
+    .filter(c => !c.startViewGlow && Math.abs(c.x - 0.08) < 0.80 && c.z < 0.35)
+    .sort((a, b) => b.z - a.z); // closest-to-Rabbid first, then farther forward
+  const rabbidLeftFrontTubeTarget = rabbidLeftLineTubes[1] || rabbidLeftLineTubes[0] || null;
+
   console.log('[TABLE FLUORESCENTS]', tableCenters.length, tableCenters);
-  console.log('[RABBID LEFT-FRONT TUBE TARGET]', tableCenters.find(c => Math.abs(c.x - 0.08) < 0.42 && Math.abs(c.z + 0.72) < 0.34) || null);
+  console.log('[RABBID LEFT LINE TUBES]', rabbidLeftLineTubes);
+  console.log('[RABBID LEFT-FRONT TARGET]', rabbidLeftFrontTubeTarget);
 
   tableCenters.forEach(({ x, z, startViewGlow = false }) => {
-    // Target: the added table fluorescent the user meant.
-    // Based on the previous target identification, it is the Rabbid-left-front tube
-    // on the added table-light line, around x 0.08 / z -0.72.
-    const isRabbidLeftFrontTube = !startViewGlow
-      && Math.abs(x - 0.08) < 0.42
-      && Math.abs(z + 0.72) < 0.34;
+    const isRabbidLeftFrontTube = !!rabbidLeftFrontTubeTarget
+      && !startViewGlow
+      && Math.abs(x - rabbidLeftFrontTubeTarget.x) < 0.08
+      && Math.abs(z - rabbidLeftFrontTubeTarget.z) < 0.08;
 
     const mat = baseMat.clone();
     if (mat.emissive) mat.emissive.setHex(tableTubeColor);
@@ -1004,7 +1007,7 @@ function addCeilingLightFixtures(root) {
       const longAxis = tubeSize.x >= tubeSize.y && tubeSize.x >= tubeSize.z
         ? "x"
         : (tubeSize.y >= tubeSize.z ? "y" : "z");
-      mesh.scale[longAxis] *= isRabbidLeftFrontTube ? 5.80 : 1.42;
+      mesh.scale[longAxis] *= isRabbidLeftFrontTube ? 7.20 : 1.42;
     }
     mesh.frustumCulled = false;
     mesh.visible = weatherMode === "rain";
