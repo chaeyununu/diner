@@ -1012,9 +1012,9 @@ function addCeilingLightFixtures(root) {
       if (isRearViewCircledTube) {
         // REAR-view circled fluorescent only:
         // extend it much more toward the arrow direction (screen-right / +X).
-        mesh.scale[longAxis] *= 3.40;
-        mesh.position.x += 0.58;
-        rearTubeLightOffsetX = 0.38;
+        mesh.scale[longAxis] *= 4.20;
+        mesh.position.x += 0.95;
+        rearTubeLightOffsetX = 0.68;
       } else {
         mesh.scale[longAxis] *= 1.42;
       }
